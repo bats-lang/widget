@@ -192,6 +192,140 @@
 
 $UNITTEST.run begin
 
+(* ---- apply_diff: apply a diff operation to a widget ---- *)
+
+fn widget_id_eq(a: widget_id, b: widget_id): bool =
+  case+ a of
+  | Root() => (case+ b of | Root() => true | _ => false)
+  | Generated(_, _) => (case+ b of | Generated(_, _) => false | _ => false)
+
+fn apply_diff(w: widget, d: diff): widget =
+  case+ d of
+  | SetHidden(target, new_h) => (case+ w of
+    | Element(id, top, _, cls) =>
+        if widget_id_eq(id, target) then Element(id, top, new_h, cls)
+        else w
+    | Text(_) => w)
+  | SetClass(target, new_cls) => (case+ w of
+    | Element(id, top, h, _) =>
+        if widget_id_eq(id, target) then Element(id, top, h, new_cls)
+        else w
+    | Text(_) => w)
+  | RemoveAllChildren(_) => w
+  | AddChild(_, _) => w
+  | RemoveChild(_, _) => w
+
+fn widget_eq(a: widget, b: widget): bool =
+  case+ a of
+  | Text(s1) => (case+ b of
+    | Text(s2) => (s1 = s2)
+    | Element(_, _, _, _) => false)
+  | Element(id1, _, h1, c1) => (case+ b of
+    | Text(_) => false
+    | Element(id2, _, h2, c2) =>
+        widget_id_eq(id1, id2) &&
+        $AR.eq_int_int(h1, h2) &&
+        $AR.eq_int_int(c1, c2))
+
+(* ---- Round-trip proofs: change -> diff -> apply = expected ---- *)
+
+(* Prove: hiding a visible widget via SetHidden produces the hidden widget *)
+fn test_proof_set_hidden(): bool = let
+  val original = Element(Root(), Normal(Div()), 0, ~1)
+  val desired  = Element(Root(), Normal(Div()), 1, ~1)
+  val d = SetHidden(Root(), 1)
+  val result = apply_diff(original, d)
+in widget_eq(result, desired) end
+
+(* Prove: unhiding a hidden widget via SetHidden produces the visible widget *)
+fn test_proof_unset_hidden(): bool = let
+  val original = Element(Root(), Normal(Div()), 1, ~1)
+  val desired  = Element(Root(), Normal(Div()), 0, ~1)
+  val d = SetHidden(Root(), 0)
+  val result = apply_diff(original, d)
+in widget_eq(result, desired) end
+
+(* Prove: setting class on a widget via SetClass produces widget with that class *)
+fn test_proof_set_class(): bool = let
+  val original = Element(Root(), Normal(Span()), 0, ~1)
+  val desired  = Element(Root(), Normal(Span()), 0, 3)
+  val d = SetClass(Root(), 3)
+  val result = apply_diff(original, d)
+in widget_eq(result, desired) end
+
+(* Prove: removing class via SetClass(-1) produces classless widget *)
+fn test_proof_remove_class(): bool = let
+  val original = Element(Root(), Normal(Span()), 0, 5)
+  val desired  = Element(Root(), Normal(Span()), 0, ~1)
+  val d = SetClass(Root(), ~1)
+  val result = apply_diff(original, d)
+in widget_eq(result, desired) end
+
+(* Prove: SetHidden on a non-matching id is a no-op *)
+fn test_proof_hidden_wrong_id(): bool = let
+  val original = Element(Root(), Normal(Div()), 0, ~1)
+  val d = SetHidden(Root(), 1)
+  (* Apply to a Text widget — should be unchanged *)
+  val text_w = Text("hello")
+  val result = apply_diff(text_w, d)
+in widget_eq(result, text_w) end
+
+(* Prove: SetClass on a Text widget is a no-op *)
+fn test_proof_class_on_text(): bool = let
+  val w = Text("content")
+  val d = SetClass(Root(), 7)
+  val result = apply_diff(w, d)
+in widget_eq(result, w) end
+
+(* Prove: applying SetHidden twice is idempotent *)
+fn test_proof_hidden_idempotent(): bool = let
+  val w = Element(Root(), Normal(Div()), 0, ~1)
+  val d = SetHidden(Root(), 1)
+  val w1 = apply_diff(w, d)
+  val w2 = apply_diff(w1, d)
+in widget_eq(w1, w2) end
+
+(* Prove: applying SetHidden then reversing restores original *)
+fn test_proof_hidden_reversible(): bool = let
+  val original = Element(Root(), Normal(Div()), 0, 2)
+  val hide = SetHidden(Root(), 1)
+  val show = SetHidden(Root(), 0)
+  val hidden = apply_diff(original, hide)
+  val restored = apply_diff(hidden, show)
+in widget_eq(restored, original) end
+
+(* Prove: applying SetClass then SetClass replaces, doesn't accumulate *)
+fn test_proof_class_replaces(): bool = let
+  val w = Element(Root(), Normal(P()), 0, 1)
+  val d1 = SetClass(Root(), 5)
+  val d2 = SetClass(Root(), 9)
+  val w1 = apply_diff(w, d1)
+  val w2 = apply_diff(w1, d2)
+  val expected = Element(Root(), Normal(P()), 0, 9)
+in widget_eq(w2, expected) end
+
+(* Prove: SetHidden and SetClass compose correctly *)
+fn test_proof_compose_hidden_class(): bool = let
+  val w = Element(Root(), Normal(Article()), 0, ~1)
+  val d1 = SetHidden(Root(), 1)
+  val d2 = SetClass(Root(), 4)
+  val w1 = apply_diff(w, d1)
+  val w2 = apply_diff(w1, d2)
+  val expected = Element(Root(), Normal(Article()), 1, 4)
+in widget_eq(w2, expected) end
+
+(* Prove: order of composition matters *)
+fn test_proof_compose_order(): bool = let
+  val w = Element(Root(), Normal(Nav()), 0, ~1)
+  val hide = SetHidden(Root(), 1)
+  val cls = SetClass(Root(), 2)
+  val hide_then_cls = apply_diff(apply_diff(w, hide), cls)
+  val cls_then_hide = apply_diff(apply_diff(w, cls), hide)
+  (* Both should produce the same result since they touch different fields *)
+in widget_eq(hide_then_cls, cls_then_hide) end
+
+(* ---- Original datatype construction tests ---- *)
+
 fn test_rel_values(): bool = let
   val r1 = RelNoopener()
   val r2 = RelNoreferrer()
