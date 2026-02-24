@@ -185,3 +185,158 @@
   | SetInputRequired of (int)
   (* Details *)
   | SetDetailsOpen of (int)
+
+(* ============================================================
+   Unit tests
+   ============================================================ *)
+
+$UNITTEST.run begin
+
+fn test_rel_values(): bool = let
+  val r1 = RelNoopener()
+  val r2 = RelNoreferrer()
+  val ok1 = case+ r1 of | RelNoopener() => true | _ => false
+  val ok2 = case+ r2 of | RelNoreferrer() => true | _ => false
+in ok1 && ok2 end
+
+fn test_form_enctype(): bool = let
+  val e1 = EnctypeUrlencoded()
+  val e2 = EnctypeMultipart()
+  val e3 = EnctypePlain()
+  val ok1 = case+ e1 of | EnctypeUrlencoded() => true | _ => false
+  val ok2 = case+ e2 of | EnctypeMultipart() => true | _ => false
+  val ok3 = case+ e3 of | EnctypePlain() => true | _ => false
+in ok1 && ok2 && ok3 end
+
+fn test_input_types(): bool = let
+  val t1 = InputText()
+  val t2 = InputCheckbox()
+  val t3 = InputHidden()
+  val ok1 = case+ t1 of | InputText() => true | _ => false
+  val ok2 = case+ t2 of | InputCheckbox() => true | _ => false
+  val ok3 = case+ t3 of | InputHidden() => true | _ => false
+in ok1 && ok2 && ok3 end
+
+fn test_html_normal(): bool = let
+  val d = Div()
+  val s = Span()
+  val h = H1()
+  val p = P()
+  val ok1 = case+ d of | Div() => true | _ => false
+  val ok2 = case+ s of | Span() => true | _ => false
+  val ok3 = case+ h of | H1() => true | _ => false
+  val ok4 = case+ p of | P() => true | _ => false
+in ok1 && ok2 && ok3 && ok4 end
+
+fn test_html_normal_with_args(): bool = let
+  val a = A("https://example.com", 1)
+  val btn = Button(ButtonSubmit())
+  val fm = Form("/submit", FormPost(), EnctypeUrlencoded())
+  val ok1 = case+ a of | A(href, tgt) => $AR.eq_int_int(tgt, 1) | _ => false
+  val ok2 = case+ btn of | Button(bt) => (case+ bt of | ButtonSubmit() => true | _ => false) | _ => false
+  val ok3 = case+ fm of | Form(_, m, _) => (case+ m of | FormPost() => true | _ => false) | _ => false
+in ok1 && ok2 && ok3 end
+
+fn test_html_void(): bool = let
+  val b = Br()
+  val h = Hr()
+  val i = HtmlInput(InputEmail(), "email", 0)
+  val ok1 = case+ b of | Br() => true | _ => false
+  val ok2 = case+ h of | Hr() => true | _ => false
+  val ok3 = case+ i of | HtmlInput(t, _, _) => (case+ t of | InputEmail() => true | _ => false) | _ => false
+in ok1 && ok2 && ok3 end
+
+fn test_html_top(): bool = let
+  val n = Normal(Div())
+  val v = Void(Br())
+  val ok1 = case+ n of | Normal(_) => true | _ => false
+  val ok2 = case+ v of | Void(_) => true | _ => false
+in ok1 && ok2 end
+
+fn test_widget_id(): bool = let
+  val r = Root()
+  val ok1 = case+ r of | Root() => true | _ => false
+in ok1 end
+
+fn test_widget(): bool = let
+  val t = Text("hello")
+  val e = Element(Root(), Normal(Div()), 0, ~1)
+  val ok1 = case+ t of | Text(_) => true | _ => false
+  val ok2 = case+ e of | Element(_, _, h, _) => $AR.eq_int_int(h, 0) | _ => false
+in ok1 && ok2 end
+
+fn test_diff_remove_all(): bool = let
+  val d = RemoveAllChildren(Root())
+  val ok = case+ d of | RemoveAllChildren(id) => (case+ id of | Root() => true | _ => false) | _ => false
+in ok end
+
+fn test_diff_add_child(): bool = let
+  val child = Text("world")
+  val d = AddChild(Root(), child)
+  val ok = case+ d of | AddChild(pid, _) => (case+ pid of | Root() => true | _ => false) | _ => false
+in ok end
+
+fn test_diff_set_hidden(): bool = let
+  val d = SetHidden(Root(), 1)
+  val ok = case+ d of | SetHidden(_, h) => $AR.eq_int_int(h, 1) | _ => false
+in ok end
+
+fn test_attribute_change(): bool = let
+  val a1 = SetHref("https://example.com")
+  val a2 = SetButtonType(ButtonReset())
+  val a3 = SetFormMethod(FormGet())
+  val a4 = SetImgLoading(LoadingLazy())
+  val a5 = SetInputType(InputPassword())
+  val a6 = SetDetailsOpen(1)
+  val ok1 = case+ a1 of | SetHref(_) => true | _ => false
+  val ok2 = case+ a2 of | SetButtonType(bt) => (case+ bt of | ButtonReset() => true | _ => false) | _ => false
+  val ok3 = case+ a3 of | SetFormMethod(m) => (case+ m of | FormGet() => true | _ => false) | _ => false
+  val ok4 = case+ a4 of | SetImgLoading(l) => (case+ l of | LoadingLazy() => true | _ => false) | _ => false
+  val ok5 = case+ a5 of | SetInputType(t) => (case+ t of | InputPassword() => true | _ => false) | _ => false
+  val ok6 = case+ a6 of | SetDetailsOpen(v) => $AR.eq_int_int(v, 1) | _ => false
+in ok1 && ok2 && ok3 && ok4 && ok5 && ok6 end
+
+fn test_th_scope(): bool = let
+  val s1 = ScopeCol()
+  val s2 = ScopeRow()
+  val th = Th(2, 3, 1)
+  val ok1 = case+ s1 of | ScopeCol() => true | _ => false
+  val ok2 = case+ s2 of | ScopeRow() => true | _ => false
+  val ok3 = case+ th of | Th(cs, rs, _) => $AR.eq_int_int(cs, 2) && $AR.eq_int_int(rs, 3) | _ => false
+in ok1 && ok2 && ok3 end
+
+fn test_link_target(): bool = let
+  val t1 = Blank()
+  val t2 = Self_()
+  val t3 = Top_()
+  val ok1 = case+ t1 of | Blank() => true | _ => false
+  val ok2 = case+ t2 of | Self_() => true | _ => false
+  val ok3 = case+ t3 of | Top_() => true | _ => false
+in ok1 && ok2 && ok3 end
+
+fn test_track_kind(): bool = let
+  val k1 = TrackSubtitles()
+  val k2 = TrackCaptions()
+  val k3 = TrackMetadata()
+  val ok1 = case+ k1 of | TrackSubtitles() => true | _ => false
+  val ok2 = case+ k2 of | TrackCaptions() => true | _ => false
+  val ok3 = case+ k3 of | TrackMetadata() => true | _ => false
+in ok1 && ok2 && ok3 end
+
+fn test_ol_list_type(): bool = let
+  val o1 = OlDecimal()
+  val o2 = OlLowerRoman()
+  val ok1 = case+ o1 of | OlDecimal() => true | _ => false
+  val ok2 = case+ o2 of | OlLowerRoman() => true | _ => false
+in ok1 && ok2 end
+
+fn test_mime_main(): bool = let
+  val m1 = MimeText()
+  val m2 = MimeImage()
+  val m3 = MimeApplication()
+  val ok1 = case+ m1 of | MimeText() => true | _ => false
+  val ok2 = case+ m2 of | MimeImage() => true | _ => false
+  val ok3 = case+ m3 of | MimeApplication() => true | _ => false
+in ok1 && ok2 && ok3 end
+
+end
