@@ -1,0 +1,9 @@
+[package]
+name = "widget"
+kind = "lib"
+unsafe = false
+
+[dependencies]
+"array" = ""
+"arith" = ""
+"css" = ""
