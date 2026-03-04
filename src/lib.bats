@@ -144,11 +144,11 @@
   | WNil
   | WCons of (widget, widget_list)
 
-#pub datatype widget =
+and widget =
   | Text of (string)
   | Element of (element_node)
 
-#pub datatype element_node =
+and element_node =
   | ElementNode of (
       widget_id,    (* id *)
       html_top,     (* element type *)
@@ -173,11 +173,7 @@
   | SetTitle of (widget_id, option_str)
   | SetAttribute of (widget_id, attribute_change)
 
-(* ============================================================
-   Attribute changes
-   ============================================================ *)
-
-#pub datatype attribute_change =
+and attribute_change =
   (* A *)
   | SetHref of (string)
   | SetATarget of (option_int)
