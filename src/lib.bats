@@ -169,6 +169,8 @@ and element_node =
   | RemoveChild of (widget_id, widget_id) (* parent, child_id *)
   | SetHidden of (widget_id, int)
   | SetClass of (widget_id, int)          (* -1 = none *)
+  | SetClassName of (widget_id, string)   (* set class attr by name *)
+  | SetTextContent of (widget_id, string) (* set text content *)
   | SetTabindex of (widget_id, option_int)
   | SetTitle of (widget_id, option_str)
   | SetAttribute of (widget_id, attribute_change)
@@ -255,6 +257,8 @@ implement _wlist_remove_by_id (wl, target) =
 #pub fn remove_all_children(w: widget): @(widget, diff)
 #pub fn set_hidden(w: widget, h: int): @(widget, diff)
 #pub fn set_class(w: widget, cls: int): @(widget, diff)
+#pub fn set_class_name(w: widget, cls: string): diff
+#pub fn set_text_content(w: widget, text: string): diff
 #pub fn set_tabindex(w: widget, ti: option_int): @(widget, diff)
 #pub fn set_title(w: widget, t: option_str): @(widget, diff)
 
@@ -299,6 +303,16 @@ implement set_tabindex (w, ti) =
   | Element(ElementNode(id, top, cls, hidden, _, title, children)) =>
     @(Element(ElementNode(id, top, cls, hidden, ti, title, children)),
       SetTabindex(id, ti))
+
+implement set_class_name (w, cls) =
+  case+ w of
+  | Text(_) => SetClassName(Root(), cls)
+  | Element(ElementNode(id, _, _, _, _, _, _)) => SetClassName(id, cls)
+
+implement set_text_content (w, text) =
+  case+ w of
+  | Text(_) => SetTextContent(Root(), text)
+  | Element(ElementNode(id, _, _, _, _, _, _)) => SetTextContent(id, text)
 
 implement set_title (w, t) =
   case+ w of
@@ -362,6 +376,8 @@ fn apply_diff(w: widget, d: diff): widget =
         if widget_id_eq(id, target)
         then Element(ElementNode(id, top, cls, hidden, tabidx, title, wlist_remove_by_id(children, child_id)))
         else w
+    | SetClassName(_, _) => w  (* class name is a DOM-only concept *)
+    | SetTextContent(_, _) => w  (* text content is a DOM-only concept *)
     | SetAttribute(_, _) => w  (* attribute changes require html_top mutation *)
 
 fn widget_eq(a: widget, b: widget): bool =
