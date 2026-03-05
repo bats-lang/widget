@@ -217,6 +217,98 @@ and attribute_change =
   | SetDetailsOpen of (int)
 
 (* ============================================================
+   Internal helpers
+   ============================================================ *)
+
+fn _wlist_append(wl: widget_list, w: widget): widget_list =
+  case+ wl of
+  | WNil() => WCons(w, WNil())
+  | WCons(hd, tl) => WCons(hd, _wlist_append(tl, w))
+
+fn _widget_id_eq(a: widget_id, b: widget_id): bool =
+  case+ a of
+  | Root() => (case+ b of | Root() => true | _ => false)
+  | Generated(_, _) => false
+
+fn _wlist_remove_by_id(wl: widget_list, target: widget_id): widget_list =
+  case+ wl of
+  | WNil() => WNil()
+  | WCons(hd, tl) => let
+      val matches = case+ hd of
+        | Element(ElementNode(id, _, _, _, _, _, _)) => _widget_id_eq(id, target)
+        | Text(_) => false
+    in
+      if matches then tl
+      else WCons(hd, _wlist_remove_by_id(tl, target))
+    end
+
+fn _get_id(w: widget): widget_id =
+  case+ w of
+  | Text(_) => Root()
+  | Element(ElementNode(id, _, _, _, _, _, _)) => id
+
+(* ============================================================
+   Convenience functions: return (updated_widget, diff)
+   ============================================================ *)
+
+#pub fn add_child(parent: widget, child: widget): @(widget, diff)
+#pub fn remove_child(parent: widget, child_id: widget_id): @(widget, diff)
+#pub fn remove_all_children(w: widget): @(widget, diff)
+#pub fn set_hidden(w: widget, h: int): @(widget, diff)
+#pub fn set_class(w: widget, cls: int): @(widget, diff)
+#pub fn set_tabindex(w: widget, ti: option_int): @(widget, diff)
+#pub fn set_title(w: widget, t: option_str): @(widget, diff)
+
+implement add_child (parent, child) =
+  case+ parent of
+  | Text(_) => @(parent, AddChild(Root(), child))
+  | Element(ElementNode(id, top, cls, hidden, ti, title, children)) =>
+    @(Element(ElementNode(id, top, cls, hidden, ti, title, _wlist_append(children, child))),
+      AddChild(id, child))
+
+implement remove_child (parent, child_id) =
+  case+ parent of
+  | Text(_) => @(parent, RemoveChild(Root(), child_id))
+  | Element(ElementNode(id, top, cls, hidden, ti, title, children)) =>
+    @(Element(ElementNode(id, top, cls, hidden, ti, title, _wlist_remove_by_id(children, child_id))),
+      RemoveChild(id, child_id))
+
+implement remove_all_children (w) =
+  case+ w of
+  | Text(_) => @(w, RemoveAllChildren(Root()))
+  | Element(ElementNode(id, top, cls, hidden, ti, title, _)) =>
+    @(Element(ElementNode(id, top, cls, hidden, ti, title, WNil())),
+      RemoveAllChildren(id))
+
+implement set_hidden (w, h) =
+  case+ w of
+  | Text(_) => @(w, SetHidden(Root(), h))
+  | Element(ElementNode(id, top, cls, _, ti, title, children)) =>
+    @(Element(ElementNode(id, top, cls, h, ti, title, children)),
+      SetHidden(id, h))
+
+implement set_class (w, cls) =
+  case+ w of
+  | Text(_) => @(w, SetClass(Root(), cls))
+  | Element(ElementNode(id, top, _, hidden, ti, title, children)) =>
+    @(Element(ElementNode(id, top, cls, hidden, ti, title, children)),
+      SetClass(id, cls))
+
+implement set_tabindex (w, ti) =
+  case+ w of
+  | Text(_) => @(w, SetTabindex(Root(), ti))
+  | Element(ElementNode(id, top, cls, hidden, _, title, children)) =>
+    @(Element(ElementNode(id, top, cls, hidden, ti, title, children)),
+      SetTabindex(id, ti))
+
+implement set_title (w, t) =
+  case+ w of
+  | Text(_) => @(w, SetTitle(Root(), t))
+  | Element(ElementNode(id, top, cls, hidden, ti, _, children)) =>
+    @(Element(ElementNode(id, top, cls, hidden, ti, t, children)),
+      SetTitle(id, t))
+
+(* ============================================================
    Unit tests
    ============================================================ *)
 
@@ -224,32 +316,17 @@ $UNITTEST.run begin
 
 (* ---- Helpers ---- *)
 
-fn widget_id_eq(a: widget_id, b: widget_id): bool =
-  case+ a of
-  | Root() => (case+ b of | Root() => true | _ => false)
-  | Generated(_, _) => false
+fn widget_id_eq(a: widget_id, b: widget_id): bool = _widget_id_eq(a, b)
 
 fn wlist_len(wl: widget_list): int =
   case+ wl of
   | WNil() => 0
   | WCons(_, rest) => 1 + wlist_len(rest)
 
-fn wlist_append(wl: widget_list, w: widget): widget_list =
-  case+ wl of
-  | WNil() => WCons(w, WNil())
-  | WCons(hd, tl) => WCons(hd, wlist_append(tl, w))
+fn wlist_append(wl: widget_list, w: widget): widget_list = _wlist_append(wl, w)
 
 fn wlist_remove_by_id(wl: widget_list, target: widget_id): widget_list =
-  case+ wl of
-  | WNil() => WNil()
-  | WCons(hd, tl) => let
-      val matches = case+ hd of
-        | Element(ElementNode(id, _, _, _, _, _, _)) => widget_id_eq(id, target)
-        | Text(_) => false
-    in
-      if matches then tl
-      else WCons(hd, wlist_remove_by_id(tl, target))
-    end
+  _wlist_remove_by_id(wl, target)
 
 (* ---- apply_diff ---- *)
 
@@ -483,5 +560,54 @@ in case+ ol of | Ol(t) => (case+ t of | SomeInt(v) => $AR.eq_int_int(v, 1) | _ =
 fn test_diff_set_attribute(): bool = let
   val d = SetAttribute(Root(), SetHref("https://example.com"))
 in case+ d of | SetAttribute(_, ac) => (case+ ac of | SetHref(_) => true | _ => false) | _ => false end
+
+(* ---- Convenience function tests ---- *)
+
+fn test_conv_add_child(): bool = let
+  val w = mk(Normal(Div()))
+  val @(w2, d) = add_child(w, Text("hello"))
+in
+  (case+ w2 of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 1)
+  | _ => false) &&
+  (case+ d of | AddChild(id, _) => widget_id_eq(id, Root()) | _ => false)
+end
+
+fn test_conv_set_hidden(): bool = let
+  val w = mk(Normal(Div()))
+  val @(w2, d) = set_hidden(w, 1)
+in
+  (case+ w2 of
+  | Element(ElementNode(_, _, _, h, _, _, _)) => $AR.eq_int_int(h, 1)
+  | _ => false) &&
+  (case+ d of | SetHidden(_, v) => $AR.eq_int_int(v, 1) | _ => false)
+end
+
+fn test_conv_set_class(): bool = let
+  val w = mk(Normal(Span()))
+  val @(w2, d) = set_class(w, 7)
+in
+  (case+ w2 of
+  | Element(ElementNode(_, _, c, _, _, _, _)) => $AR.eq_int_int(c, 7)
+  | _ => false) &&
+  (case+ d of | SetClass(_, v) => $AR.eq_int_int(v, 7) | _ => false)
+end
+
+fn test_conv_remove_all_children(): bool = let
+  val w = mk(Normal(Div()))
+  val @(w1, _) = add_child(w, Text("a"))
+  val @(w2, _) = add_child(w1, Text("b"))
+  val @(w3, d) = remove_all_children(w2)
+in
+  (case+ w3 of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 0)
+  | _ => false) &&
+  (case+ d of | RemoveAllChildren(_) => true | _ => false)
+end
+
+fn test_conv_text_noop(): bool = let
+  val w = Text("hi")
+  val @(w2, _) = set_hidden(w, 1)
+in widget_eq(w, w2) end
 
 end
