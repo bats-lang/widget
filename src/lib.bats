@@ -257,8 +257,8 @@ implement _wlist_remove_by_id (wl, target) =
 #pub fn remove_all_children(w: widget): @(widget, diff)
 #pub fn set_hidden(w: widget, h: int): @(widget, diff)
 #pub fn set_class(w: widget, cls: int): @(widget, diff)
-#pub fn set_class_name(w: widget, cls: string): diff
-#pub fn set_text_content(w: widget, text: string): diff
+#pub fn set_class_name(wid: widget_id, cls: string): diff
+#pub fn set_text_content(wid: widget_id, text: string): diff
 #pub fn set_tabindex(w: widget, ti: option_int): @(widget, diff)
 #pub fn set_title(w: widget, t: option_str): @(widget, diff)
 
@@ -304,15 +304,9 @@ implement set_tabindex (w, ti) =
     @(Element(ElementNode(id, top, cls, hidden, ti, title, children)),
       SetTabindex(id, ti))
 
-implement set_class_name (w, cls) =
-  case+ w of
-  | Text(_) => SetClassName(Root(), cls)
-  | Element(ElementNode(id, _, _, _, _, _, _)) => SetClassName(id, cls)
+implement set_class_name (wid, cls) = SetClassName(wid, cls)
 
-implement set_text_content (w, text) =
-  case+ w of
-  | Text(_) => SetTextContent(Root(), text)
-  | Element(ElementNode(id, _, _, _, _, _, _)) => SetTextContent(id, text)
+implement set_text_content (wid, text) = SetTextContent(wid, text)
 
 implement set_title (w, t) =
   case+ w of
