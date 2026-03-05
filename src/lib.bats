@@ -220,17 +220,21 @@ and attribute_change =
    Internal helpers
    ============================================================ *)
 
-fn _wlist_append(wl: widget_list, w: widget): widget_list =
+#pub fn _wlist_append(wl: widget_list, w: widget): widget_list
+#pub fn _widget_id_eq(a: widget_id, b: widget_id): bool
+#pub fn _wlist_remove_by_id(wl: widget_list, target: widget_id): widget_list
+
+implement _wlist_append (wl, w) =
   case+ wl of
   | WNil() => WCons(w, WNil())
   | WCons(hd, tl) => WCons(hd, _wlist_append(tl, w))
 
-fn _widget_id_eq(a: widget_id, b: widget_id): bool =
+implement _widget_id_eq (a, b) =
   case+ a of
   | Root() => (case+ b of | Root() => true | _ => false)
   | Generated(_, _) => false
 
-fn _wlist_remove_by_id(wl: widget_list, target: widget_id): widget_list =
+implement _wlist_remove_by_id (wl, target) =
   case+ wl of
   | WNil() => WNil()
   | WCons(hd, tl) => let
@@ -241,11 +245,6 @@ fn _wlist_remove_by_id(wl: widget_list, target: widget_id): widget_list =
       if matches then tl
       else WCons(hd, _wlist_remove_by_id(tl, target))
     end
-
-fn _get_id(w: widget): widget_id =
-  case+ w of
-  | Text(_) => Root()
-  | Element(ElementNode(id, _, _, _, _, _, _)) => id
 
 (* ============================================================
    Convenience functions: return (updated_widget, diff)
