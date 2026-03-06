@@ -134,7 +134,7 @@
 
 #pub datatype widget_id =
   | Root
-  | {n:pos} Generated of ($A.text(n), int(n))
+  | {n:pos | n < 256} Generated of ($A.text(n), int(n))
 
 (* ============================================================
    Widget
