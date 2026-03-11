@@ -171,6 +171,7 @@ and element_node =
   | SetClass of (widget_id, int)          (* -1 = none *)
   | SetClassName of (widget_id, string)   (* set class attr by name *)
   | SetTextContent of (widget_id, string) (* set text content *)
+  | SetInnerHtml of (widget_id, string)  (* set innerHTML *)
   | SetTabindex of (widget_id, option_int)
   | SetTitle of (widget_id, option_str)
   | SetAttribute of (widget_id, attribute_change)
@@ -259,6 +260,7 @@ implement _wlist_remove_by_id (wl, target) =
 #pub fn set_class(w: widget, cls: int): @(widget, diff)
 #pub fn set_class_name(wid: widget_id, cls: string): diff
 #pub fn set_text_content(wid: widget_id, text: string): diff
+#pub fn set_inner_html(wid: widget_id, html: string): diff
 #pub fn set_tabindex(w: widget, ti: option_int): @(widget, diff)
 #pub fn set_title(w: widget, t: option_str): @(widget, diff)
 
@@ -307,6 +309,8 @@ implement set_tabindex (w, ti) =
 implement set_class_name (wid, cls) = SetClassName(wid, cls)
 
 implement set_text_content (wid, text) = SetTextContent(wid, text)
+
+implement set_inner_html (wid, html) = SetInnerHtml(wid, html)
 
 implement set_title (w, t) =
   case+ w of
