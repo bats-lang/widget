@@ -108,6 +108,8 @@
   | Video of (string, int, int, int, int) (* src, controls, autoplay, loop, muted *)
   | Audio of (string, int, int, int, int) (* src, controls, autoplay, loop, muted *)
   | Picture
+  (* Metadata *)
+  | Style
 
 (* ============================================================
    HTML void elements (no children)
@@ -168,7 +170,7 @@ and element_node =
   | AddChild of (widget_id, widget)       (* parent, child *)
   | RemoveChild of (widget_id, widget_id) (* parent, child_id *)
   | SetHidden of (widget_id, int)
-  | SetClass of (widget_id, int, $A.text(3), int(3))
+  | {n:pos | n < 256} SetClass of (widget_id, int, $A.text(n), int(n))  (* class index + resolved name *)
   | SetClassName of (widget_id, string)   (* set class attr by name *)
   | SetTextContent of (widget_id, string) (* set text content *)
   | SetInnerHtml of (widget_id, string)  (* set innerHTML *)
@@ -220,6 +222,14 @@ and attribute_change =
   | SetDetailsOpen of (int)
 
 (* ============================================================
+   Diff list -- for operations that produce multiple diffs
+   ============================================================ *)
+
+#pub datatype diff_list =
+  | DLNil
+  | DLCons of (diff, diff_list)
+
+(* ============================================================
    Internal helpers
    ============================================================ *)
 
@@ -263,6 +273,7 @@ implement _wlist_remove_by_id (wl, target) =
 #pub fn set_inner_html(wid: widget_id, html: string): diff
 #pub fn set_tabindex(w: widget, ti: option_int): @(widget, diff)
 #pub fn set_title(w: widget, t: option_str): @(widget, diff)
+#pub fn inject_css(parent: widget, style_id: widget_id, css: string): @(widget, diff_list)
 
 implement add_child (parent, child) =
   case+ parent of
@@ -293,13 +304,13 @@ implement set_hidden (w, h) =
       SetHidden(id, h))
 
 implement set_class (w, cls) = let
-  val @(ct, cl) = $C.class_text(cls)
+  val @(t, tlen) = $C.class_text(cls)
 in
   case+ w of
-  | Text(_) => @(w, SetClass(Root(), cls, ct, cl))
+  | Text(_) => @(w, SetClass(Root(), cls, t, tlen))
   | Element(ElementNode(id, top, _, hidden, ti, title, children)) =>
     @(Element(ElementNode(id, top, cls, hidden, ti, title, children)),
-      SetClass(id, cls, ct, cl))
+      SetClass(id, cls, t, tlen))
 end
 
 implement set_tabindex (w, ti) =
@@ -321,6 +332,12 @@ implement set_title (w, t) =
   | Element(ElementNode(id, top, cls, hidden, ti, _, children)) =>
     @(Element(ElementNode(id, top, cls, hidden, ti, t, children)),
       SetTitle(id, t))
+
+implement inject_css (parent, style_id, css) = let
+  val style_w = Element(ElementNode(style_id, Normal(Style()), ~1, 0, NoneInt(), NoneStr(), WNil()))
+  val @(parent2, d1) = add_child(parent, style_w)
+  val d2 = SetTextContent(style_id, css)
+in @(parent2, DLCons(d1, DLCons(d2, DLNil()))) end
 
 (* ============================================================
    Unit tests
@@ -379,6 +396,7 @@ fn apply_diff(w: widget, d: diff): widget =
         else w
     | SetClassName(_, _) => w  (* class name is a DOM-only concept *)
     | SetTextContent(_, _) => w  (* text content is a DOM-only concept *)
+    | SetInnerHtml(_, _) => w  (* innerHTML is a DOM-only concept *)
     | SetAttribute(_, _) => w  (* attribute changes require html_top mutation *)
 
 fn widget_eq(a: widget, b: widget): bool =
@@ -418,27 +436,27 @@ fn test_proof_hidden_idempotent(): bool = let
   val w2 = apply_diff(w1, d)
 in widget_eq(w1, w2) end
 
-fn _mk_set_class(wid: widget_id, idx: int): diff = let
-  val @(ct, cl) = $C.class_text(idx)
-in SetClass(wid, idx, ct, cl) end
+fn mk_set_class(wid: widget_id, cls: int): diff = let
+  val @(t, tlen) = $C.class_text(cls)
+in SetClass(wid, cls, t, tlen) end
 
 fn test_proof_set_class(): bool = let
   val w = mk(Normal(Span()))
-  val result = apply_diff(w, _mk_set_class(Root(), 3))
+  val result = apply_diff(w, mk_set_class(Root(), 3))
   val expected = Element(ElementNode(Root(), Normal(Span()), 3, 0, NoneInt(), NoneStr(), WNil()))
 in widget_eq(result, expected) end
 
 fn test_proof_class_replaces(): bool = let
   val w = mk(Normal(P()))
-  val w1 = apply_diff(w, _mk_set_class(Root(), 5))
-  val w2 = apply_diff(w1, _mk_set_class(Root(), 9))
+  val w1 = apply_diff(w, mk_set_class(Root(), 5))
+  val w2 = apply_diff(w1, mk_set_class(Root(), 9))
   val expected = Element(ElementNode(Root(), Normal(P()), 9, 0, NoneInt(), NoneStr(), WNil()))
 in widget_eq(w2, expected) end
 
 fn test_proof_compose_commutes(): bool = let
   val w = mk(Normal(Nav()))
-  val a = apply_diff(apply_diff(w, SetHidden(Root(), 1)), _mk_set_class(Root(), 2))
-  val b = apply_diff(apply_diff(w, _mk_set_class(Root(), 2)), SetHidden(Root(), 1))
+  val a = apply_diff(apply_diff(w, SetHidden(Root(), 1)), mk_set_class(Root(), 2))
+  val b = apply_diff(apply_diff(w, mk_set_class(Root(), 2)), SetHidden(Root(), 1))
 in widget_eq(a, b) end
 
 fn test_proof_add_child(): bool = let
@@ -486,7 +504,7 @@ end
 fn test_proof_text_ignores_diff(): bool = let
   val w = Text("unchanged")
   val w1 = apply_diff(w, SetHidden(Root(), 1))
-  val w2 = apply_diff(w, _mk_set_class(Root(), 5))
+  val w2 = apply_diff(w, mk_set_class(Root(), 5))
   val w3 = apply_diff(w, AddChild(Root(), Text("x")))
   val w4 = apply_diff(w, RemoveAllChildren(Root()))
 in widget_eq(w1, w) && widget_eq(w2, w) && widget_eq(w3, w) && widget_eq(w4, w) end
