@@ -173,6 +173,7 @@ and element_node =
   | {n:pos | n < 256} SetClass of (widget_id, int, $A.text(n), int(n))  (* class index + resolved name *)
   | SetClassName of (widget_id, string)   (* set class attr by name *)
   | SetTextContent of (widget_id, string) (* set text content *)
+  | SetInnerHtml of (widget_id, string)  (* set innerHTML *)
   | SetTabindex of (widget_id, option_int)
   | SetTitle of (widget_id, option_str)
   | SetAttribute of (widget_id, attribute_change)
@@ -269,6 +270,7 @@ implement _wlist_remove_by_id (wl, target) =
 #pub fn set_class(w: widget, cls: int): @(widget, diff)
 #pub fn set_class_name(wid: widget_id, cls: string): diff
 #pub fn set_text_content(wid: widget_id, text: string): diff
+#pub fn set_inner_html(wid: widget_id, html: string): diff
 #pub fn set_tabindex(w: widget, ti: option_int): @(widget, diff)
 #pub fn set_title(w: widget, t: option_str): @(widget, diff)
 #pub fn inject_css(parent: widget, style_id: widget_id, css: string): @(widget, diff_list)
@@ -321,6 +323,8 @@ implement set_tabindex (w, ti) =
 implement set_class_name (wid, cls) = SetClassName(wid, cls)
 
 implement set_text_content (wid, text) = SetTextContent(wid, text)
+
+implement set_inner_html (wid, html) = SetInnerHtml(wid, html)
 
 implement set_title (w, t) =
   case+ w of
@@ -392,6 +396,7 @@ fn apply_diff(w: widget, d: diff): widget =
         else w
     | SetClassName(_, _) => w  (* class name is a DOM-only concept *)
     | SetTextContent(_, _) => w  (* text content is a DOM-only concept *)
+    | SetInnerHtml(_, _) => w  (* innerHTML is a DOM-only concept *)
     | SetAttribute(_, _) => w  (* attribute changes require html_top mutation *)
 
 fn widget_eq(a: widget, b: widget): bool =
