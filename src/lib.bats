@@ -174,7 +174,6 @@ and element_node =
   | {n:pos | n < 256} SetClass of (widget_id, int, $A.text(n), int(n))  (* class index + resolved name *)
   | {n:pos | n < 256} SetClassName of (widget_id, $A.text(n), int(n))   (* set class attr by name *)
   | {n:pos | n < 65536} SetTextContent of (widget_id, $A.text(n), int(n)) (* set text content *)
-  | {n:pos | n < 65536} SetInnerHtml of (widget_id, $A.text(n), int(n))  (* set innerHTML *)
   | SetTabindex of (widget_id, option_int)
   | SetTitle of (widget_id, option_str)
   | SetAttribute of (widget_id, attribute_change)
@@ -271,7 +270,6 @@ implement _wlist_remove_by_id (wl, target) =
 #pub fn set_class(w: widget, cls: int): @(widget, diff)
 #pub fn set_class_name{n:pos | n < 256}(wid: widget_id, cls: $A.text(n), len: int n): diff
 #pub fn set_text_content{n:pos | n < 65536}(wid: widget_id, text: $A.text(n), len: int n): diff
-#pub fn set_inner_html{n:pos | n < 65536}(wid: widget_id, html: $A.text(n), len: int n): diff
 #pub fn set_tabindex(w: widget, ti: option_int): @(widget, diff)
 #pub fn set_title(w: widget, t: option_str): @(widget, diff)
 #pub fn inject_css{n:pos | n < 65536}(parent: widget, style_id: widget_id, css: $A.text(n), len: int n): @(widget, diff_list)
@@ -324,8 +322,6 @@ implement set_tabindex (w, ti) =
 implement set_class_name (wid, cls, len) = SetClassName(wid, cls, len)
 
 implement set_text_content (wid, text, len) = SetTextContent(wid, text, len)
-
-implement set_inner_html (wid, html, len) = SetInnerHtml(wid, html, len)
 
 implement set_title (w, t) =
   case+ w of
@@ -425,7 +421,6 @@ fn apply_diff(w: widget, d: diff): widget =
         else w
     | SetClassName(_, _, _) => w  (* class name is a DOM-only concept *)
     | SetTextContent(_, _, _) => w  (* text content is a DOM-only concept *)
-    | SetInnerHtml(_, _, _) => w  (* innerHTML is a DOM-only concept *)
     | SetAttribute(_, _) => w  (* attribute changes require html_top mutation *)
 
 fn widget_eq(a: widget, b: widget): bool =
