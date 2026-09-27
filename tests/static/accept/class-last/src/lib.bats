@@ -6,4 +6,7 @@
 fn div (): $W.widget =
   $W.Element($W.ElementNode($W.Root(), $W.Normal($W.Div()), $W.NoClass(), false, $W.NoneInt(), $W.NoneStr(), $W.WNil()))
 
-fn last (): $W.diff = let val @(_, d) = $W.set_class(div(), 675) in d end
+fn last (): $W.diff = let
+  val @(w, d) = $W.set_class(div(), 675)
+  val () = $W.widget_free(w)
+in d end

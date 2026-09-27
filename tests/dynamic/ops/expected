@@ -16,8 +16,15 @@ ok   class
 ok   class_diff
 ok   tabindex
 ok   tabindex_diff
+ok   title
 ok   title_diff
+ok   title_unset_diff
+ok   all_kept
 ok   css_child
 ok   css_diffs
 ok   text_unchanged
 ok   text_diff_root
+ok   rich_size
+ok   copy_own
+ok   rich_cleared
+ok   diffs_freed
