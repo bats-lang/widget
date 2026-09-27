@@ -155,9 +155,20 @@
    Widget ID
    ============================================================ *)
 
-#pub datatype widget_id =
-  | Root
-  | {n:pos | n < 256} Generated of ($A.text(n), int(n))
+(* An element's id: its text and length, or the empty id, the root (the
+   document's mount). Flat: a datatype's cell is never freed (there is no
+   GC), and an id is made for every diff. *)
+#pub typedef widget_id = [n:nat | n < 256] @($A.text(n), int n)
+
+(* The root's id *)
+#pub fn Root (): widget_id
+
+(* The id whose text is t *)
+#pub fn Generated {n:pos | n < 256} (t: $A.text(n), n: int n): widget_id
+
+implement Root () = @($A.text_lit(""), 0)
+
+implement Generated (t, n) = @(t, n)
 
 (* ============================================================
    Widget
@@ -284,13 +295,12 @@ fun _text_eq {n,k:nat | k <= n} .<n - k>.
 
 (* Generated ids are equal when their texts are: remove_child finds a
    generated child by the id it was created with *)
-implement _widget_id_eq (a, b) =
-  case+ a of
-  | Root() => (case+ b of | Root() => true | _ => false)
-  | Generated(ta, na) =>
-    (case+ b of
-     | Generated(tb, nb) => if na = nb then _text_eq(ta, tb, na, 0) else false
-     | Root() => false)
+implement _widget_id_eq (a, b) = let
+  val @(ta, na) = a
+  val @(tb, nb) = b
+in
+  if na = nb then _text_eq(ta, tb, na, 0) else false
+end
 
 (* wl without its first element whose id is target *)
 fun _remove {n,s:nat} .<n>.
