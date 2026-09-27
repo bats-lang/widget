@@ -203,7 +203,9 @@ and element_node(int) =
    Diff operations
    ============================================================ *)
 
-#pub datatype diff =
+(* A change to the document. Linear: a datatype's cell is never freed
+   (there is no GC); dom's apply consumes each diff. *)
+#pub datavtype diff =
   | RemoveAllChildren of (widget_id)
   | AddChild of (widget_id, widget)       (* parent, child *)
   | RemoveChild of (widget_id, widget_id) (* parent, child_id *)
@@ -263,11 +265,11 @@ and attribute_change =
    ============================================================ *)
 
 (* A sequence of n diffs; diff_list is one of any length *)
-#pub datatype diff_seq(int) =
+#pub datavtype diff_seq(int) =
   | DLNil(0)
   | {n:nat} DLCons(n + 1) of (diff, diff_seq(n))
 
-#pub typedef diff_list = [n:nat] diff_seq(n)
+#pub vtypedef diff_list = [n:nat] diff_seq(n)
 
 (* ============================================================
    Internal helpers
@@ -318,9 +320,42 @@ fun _remove {n,s:nat} .<n>.
 
 implement _wlist_remove_by_id (wl, target) = _remove(wl, target)
 
+fn _attr_free (ac: attribute_change): void =
+  case+ ac of
+  | ~SetHref(_, _) => () | ~SetATarget(_) => ()
+  | ~SetButtonType(_) => () | ~SetButtonDisabled(_) => ()
+  | ~SetFormAction(_, _) => () | ~SetFormMethod(_) => () | ~SetFormEnctype(_) => ()
+  | ~SetSelectDisabled(_) => () | ~SetSelectMultiple(_) => ()
+  | ~SetOptionValue(_, _) => () | ~SetOptionDisabled(_) => () | ~SetOptionSelected(_) => ()
+  | ~SetTextareaValue(_, _) => () | ~SetTextareaDisabled(_) => () | ~SetTextareaReadonly(_) => ()
+  | ~SetTextareaRows(_) => () | ~SetTextareaCols(_) => ()
+  | ~SetColspan(_) => () | ~SetRowspan(_) => () | ~SetThScope(_) => ()
+  | ~SetImgSrc(_, _) => () | ~SetImgAlt(_, _) => () | ~SetImgLoading(_) => ()
+  | ~SetInputType(_) => () | ~SetInputName(_) => () | ~SetInputValue(_) => ()
+  | ~SetInputDisabled(_) => () | ~SetInputChecked(_) => () | ~SetInputRequired(_) => ()
+  | ~SetInputReadonly(_) => ()
+  | ~SetDetailsOpen(_) => ()
+
+fun _dl_free {n:nat} .<n>. (dl: diff_seq(n)): void =
+  case+ dl of
+  | ~DLNil() => ()
+  | ~DLCons(d, rest) => let
+      val () = case+ d of
+        | ~SetAttribute(_, ac) => _attr_free(ac)
+        | ~RemoveAllChildren(_) => () | ~AddChild(_, _) => () | ~RemoveChild(_, _) => ()
+        | ~SetHidden(_, _) => () | ~SetClass(_, _, _, _) => () | ~SetClassName(_, _, _) => ()
+        | ~SetTextContent(_, _, _) => () | ~SetTabindex(_, _) => () | ~SetTitle(_, _) => ()
+    in _dl_free(rest) end
+
 (* ============================================================
    Convenience functions: return (updated_widget, diff)
    ============================================================ *)
+
+(* Let go of a diff that is not applied *)
+#pub fn diff_free (d: diff): void
+
+(* Let go of a diff list that is not applied *)
+#pub fn diff_list_free (dl: diff_list): void
 
 #pub fn add_child(parent: widget, child: widget): @(widget, diff)
 #pub fn remove_child(parent: widget, child_id: widget_id): @(widget, diff)
@@ -332,6 +367,21 @@ implement _wlist_remove_by_id (wl, target) = _remove(wl, target)
 #pub fn set_tabindex(w: widget, ti: option_int): @(widget, diff)
 #pub fn set_title(w: widget, t: option_str): @(widget, diff)
 #pub fn inject_css{n:pos | n < 65536}(parent: widget, style_id: widget_id, css: $A.text(n), len: int n): @(widget, diff_list)
+
+implement diff_free (d) =
+  case+ d of
+  | ~RemoveAllChildren(_) => ()
+  | ~AddChild(_, _) => ()
+  | ~RemoveChild(_, _) => ()
+  | ~SetHidden(_, _) => ()
+  | ~SetClass(_, _, _, _) => ()
+  | ~SetClassName(_, _, _) => ()
+  | ~SetTextContent(_, _, _) => ()
+  | ~SetTabindex(_, _) => ()
+  | ~SetTitle(_, _) => ()
+  | ~SetAttribute(_, ac) => _attr_free(ac)
+
+implement diff_list_free (dl) = _dl_free(dl)
 
 implement add_child (parent, child) =
   case+ parent of
@@ -441,7 +491,7 @@ fn wlist_remove_by_id {n,s:nat} (wl: widget_list(n, s), target: widget_id): [m,s
 
 (* ---- apply_diff ---- *)
 
-fn apply_diff(w: widget, d: diff): widget =
+fn _apply_diff(w: widget, d: !diff): widget =
   case+ w of
   | Text(_, _) => w
   | Element(ElementNode(id, top, cls, hidden, tabidx, title, children)) =>
@@ -477,6 +527,14 @@ fn apply_diff(w: widget, d: diff): widget =
     | SetClassName(_, _, _) => w  (* class name is a DOM-only concept *)
     | SetTextContent(_, _, _) => w  (* text content is a DOM-only concept *)
     | SetAttribute(_, _) => w  (* attribute changes require html_top mutation *)
+
+fn apply_diff(w: widget, d: diff): widget = let
+  val r = _apply_diff(w, d)
+in let val () = diff_free(d) in r end end
+
+
+(* ok, having let go of d (ok is computed from d before it goes) *)
+fn then_free(ok: bool, d: diff): bool = let val () = diff_free(d) in ok end
 
 fn class_eq(a: class_opt, b: class_opt): bool =
   case+ a of
@@ -515,9 +573,8 @@ in widget_eq(restored, w) end
 
 fn test_proof_hidden_idempotent(): bool = let
   val w = mk(Normal(Div()))
-  val d = SetHidden(Root(), true)
-  val w1 = apply_diff(w, d)
-  val w2 = apply_diff(w1, d)
+  val w1 = apply_diff(w, SetHidden(Root(), true))
+  val w2 = apply_diff(w1, SetHidden(Root(), true))
 in widget_eq(w1, w2) end
 
 fn mk_set_class {i:nat | i < 676} (wid: widget_id, cls: int i): diff = let
@@ -685,55 +742,58 @@ in case+ ol of | Ol(t) => (case+ t of | OlTypeIs(OlLowerAlpha()) => true | _ => 
 fn test_diff_set_attribute(): bool = let
   val @(ht, hlen) = mk_text3('u', 'r', 'l')
   val d = SetAttribute(Root(), SetHref(ht, hlen))
-in case+ d of | SetAttribute(_, ac) => (case+ ac of | SetHref(_, _) => true | _ => false) | _ => false end
+in then_free((case+ d of | SetAttribute(_, ac) => (case+ ac of | SetHref(_, _) => true | _ => false) | _ => false), d) end
 
 (* ---- Convenience function tests ---- *)
 
 fn test_conv_add_child(): bool = let
   val w = mk(Normal(Div()))
   val @(w2, d) = add_child(w, txt_widget5('h', 'e', 'l', 'l', 'o'))
+  val okd = then_free((case+ d of | AddChild(id, _) => widget_id_eq(id, Root()) | _ => false), d)
 in
   (case+ w2 of
   | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 1)
-  | _ => false) &&
-  (case+ d of | AddChild(id, _) => widget_id_eq(id, Root()) | _ => false)
+  | _ => false) && okd
 end
 
 fn test_conv_set_hidden(): bool = let
   val w = mk(Normal(Div()))
   val @(w2, d) = set_hidden(w, true)
+  val okd = then_free((case+ d of | SetHidden(_, v) => v | _ => false), d)
 in
   (case+ w2 of
   | Element(ElementNode(_, _, _, h, _, _, _)) => h
-  | _ => false) &&
-  (case+ d of | SetHidden(_, v) => v | _ => false)
+  | _ => false) && okd
 end
 
 fn test_conv_set_class(): bool = let
   val w = mk(Normal(Span()))
   val @(w2, d) = set_class(w, 7)
+  val okd = then_free((case+ d of | SetClass(_, v, _, _) => $AR.eq_int_int(v, 7) | _ => false), d)
 in
   (case+ w2 of
   | Element(ElementNode(_, _, c, _, _, _, _)) => class_eq(c, ClassIdx(7))
-  | _ => false) &&
-  (case+ d of | SetClass(_, v, _, _) => $AR.eq_int_int(v, 7) | _ => false)
+  | _ => false) && okd
 end
 
 fn test_conv_remove_all_children(): bool = let
   val w = mk(Normal(Div()))
-  val @(w1, _) = add_child(w, txt_widget1('a'))
-  val @(w2, _) = add_child(w1, txt_widget1('b'))
+  val @(w1, d1) = add_child(w, txt_widget1('a'))
+  val () = diff_free(d1)
+  val @(w2, d2) = add_child(w1, txt_widget1('b'))
+  val () = diff_free(d2)
   val @(w3, d) = remove_all_children(w2)
+  val okd = then_free((case+ d of | RemoveAllChildren(_) => true | _ => false), d)
 in
   (case+ w3 of
   | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 0)
-  | _ => false) &&
-  (case+ d of | RemoveAllChildren(_) => true | _ => false)
+  | _ => false) && okd
 end
 
 fn test_conv_text_noop(): bool = let
   val w = txt_widget2('h', 'i')
-  val @(w2, _) = set_hidden(w, true)
+  val @(w2, d3) = set_hidden(w, true)
+  val () = diff_free(d3)
 in widget_eq(w, w2) end
 
 (* Generated ids are compared by their text: two ids with the same text
@@ -742,8 +802,10 @@ fn test_remove_child_by_generated_id(): bool = let
   val @(t1, n1) = mk_text2('b', '1')
   val @(t2, n2) = mk_text2('b', '1')
   val kid = Element(ElementNode(Generated(t1, n1), Normal(Div()), NoClass(), false, NoneInt(), NoneStr(), WNil()))
-  val @(w1, _) = add_child(mk(Normal(Div())), kid)
-  val @(w2, _) = remove_child(w1, Generated(t2, n2))
+  val @(w1, d4) = add_child(mk(Normal(Div())), kid)
+  val () = diff_free(d4)
+  val @(w2, d5) = remove_child(w1, Generated(t2, n2))
+  val () = diff_free(d5)
 in
   case+ w2 of
   | Element(ElementNode(_, _, _, _, _, _, ch)) => wlist_len(ch) = 0
