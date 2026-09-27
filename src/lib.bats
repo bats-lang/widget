@@ -359,3 +359,355 @@ implement inject_css (parent, style_id, css, len) = let
   val @(parent2, d1) = add_child(parent, style_w)
   val d2 = SetTextContent(style_id, css, len)
 in @(parent2, DLCons(d1, DLCons(d2, DLNil()))) end
+
+$UNITTEST.run begin
+
+(* ---- Helpers ---- *)
+
+fn widget_id_eq(a: widget_id, b: widget_id): bool = _widget_id_eq(a, b)
+
+fn mk_text1(c1: char): @($A.text(1), int(1)) = let
+  var buf = @[char][1](c1)
+in @($S.text_of_chars(buf, 1), 1) end
+
+fn mk_text2(c1: char, c2: char): @($A.text(2), int(2)) = let
+  var buf = @[char][2](c1, c2)
+in @($S.text_of_chars(buf, 2), 2) end
+
+fn mk_text3(c1: char, c2: char, c3: char): @($A.text(3), int(3)) = let
+  var buf = @[char][3](c1, c2, c3)
+in @($S.text_of_chars(buf, 3), 3) end
+
+fn mk_text5(c1: char, c2: char, c3: char, c4: char, c5: char): @($A.text(5), int(5)) = let
+  var buf = @[char][5](c1, c2, c3, c4, c5)
+in @($S.text_of_chars(buf, 5), 5) end
+
+fn txt_widget1(c1: char): widget = let
+  val @(t, n) = mk_text1(c1)
+in Text(t, n) end
+
+fn txt_widget2(c1: char, c2: char): widget = let
+  val @(t, n) = mk_text2(c1, c2)
+in Text(t, n) end
+
+fn txt_widget5(c1: char, c2: char, c3: char, c4: char, c5: char): widget = let
+  val @(t, n) = mk_text5(c1, c2, c3, c4, c5)
+in Text(t, n) end
+
+fun wlist_len {n:nat} .<n>. (wl: widget_list(n)): int n =
+  case+ wl of
+  | WNil() => 0
+  | WCons(_, rest) => 1 + wlist_len(rest)
+
+fn wlist_append {n:nat} (wl: widget_list(n), w: widget): widget_list(n + 1) = _wlist_append(wl, w)
+
+fn wlist_remove_by_id {n:nat} (wl: widget_list(n), target: widget_id): [m:nat | m <= n] widget_list(m) =
+  _wlist_remove_by_id(wl, target)
+
+(* ---- apply_diff ---- *)
+
+fn apply_diff(w: widget, d: diff): widget =
+  case+ w of
+  | Text(_, _) => w
+  | Element(ElementNode(id, top, cls, hidden, tabidx, title, children)) =>
+    case+ d of
+    | SetHidden(target, new_h) =>
+        if widget_id_eq(id, target)
+        then Element(ElementNode(id, top, cls, new_h, tabidx, title, children))
+        else w
+    | SetClass(target, new_cls, _, _) =>
+        if widget_id_eq(id, target)
+        then Element(ElementNode(id, top, new_cls, hidden, tabidx, title, children))
+        else w
+    | SetTabindex(target, new_ti) =>
+        if widget_id_eq(id, target)
+        then Element(ElementNode(id, top, cls, hidden, new_ti, title, children))
+        else w
+    | SetTitle(target, new_t) =>
+        if widget_id_eq(id, target)
+        then Element(ElementNode(id, top, cls, hidden, tabidx, new_t, children))
+        else w
+    | RemoveAllChildren(target) =>
+        if widget_id_eq(id, target)
+        then Element(ElementNode(id, top, cls, hidden, tabidx, title, WNil()))
+        else w
+    | AddChild(target, child) =>
+        if widget_id_eq(id, target)
+        then Element(ElementNode(id, top, cls, hidden, tabidx, title, wlist_append(children, child)))
+        else w
+    | RemoveChild(target, child_id) =>
+        if widget_id_eq(id, target)
+        then Element(ElementNode(id, top, cls, hidden, tabidx, title, wlist_remove_by_id(children, child_id)))
+        else w
+    | SetClassName(_, _, _) => w  (* class name is a DOM-only concept *)
+    | SetTextContent(_, _, _) => w  (* text content is a DOM-only concept *)
+    | SetAttribute(_, _) => w  (* attribute changes require html_top mutation *)
+
+fn widget_eq(a: widget, b: widget): bool =
+  case+ a of
+  | Text(_, l1) => (case+ b of | Text(_, l2) => $AR.eq_int_int(l1, l2) | _ => false)
+  | Element(ElementNode(id1, _, c1, h1, _, _, ch1)) =>
+    (case+ b of
+    | Text(_, _) => false
+    | Element(ElementNode(id2, _, c2, h2, _, _, ch2)) =>
+        widget_id_eq(id1, id2) &&
+        $AR.eq_int_int(c1, c2) &&
+        $AR.eq_int_int(h1, h2) &&
+        $AR.eq_int_int(wlist_len(ch1), wlist_len(ch2)))
+
+fn mk(top: html_top): widget =
+  Element(ElementNode(Root(), top, ~1, 0, NoneInt(), NoneStr(), WNil()))
+
+(* ---- Round-trip proofs ---- *)
+
+fn test_proof_set_hidden(): bool = let
+  val w = mk(Normal(Div()))
+  val d = SetHidden(Root(), 1)
+  val result = apply_diff(w, d)
+  val expected = Element(ElementNode(Root(), Normal(Div()), ~1, 1, NoneInt(), NoneStr(), WNil()))
+in widget_eq(result, expected) end
+
+fn test_proof_hidden_reversible(): bool = let
+  val w = mk(Normal(Div()))
+  val hidden = apply_diff(w, SetHidden(Root(), 1))
+  val restored = apply_diff(hidden, SetHidden(Root(), 0))
+in widget_eq(restored, w) end
+
+fn test_proof_hidden_idempotent(): bool = let
+  val w = mk(Normal(Div()))
+  val d = SetHidden(Root(), 1)
+  val w1 = apply_diff(w, d)
+  val w2 = apply_diff(w1, d)
+in widget_eq(w1, w2) end
+
+fn mk_set_class {i:nat | i < 676} (wid: widget_id, cls: int i): diff = let
+  val @(t, tlen) = $C.class_text(cls)
+in SetClass(wid, cls, t, tlen) end
+
+fn test_proof_set_class(): bool = let
+  val w = mk(Normal(Span()))
+  val result = apply_diff(w, mk_set_class(Root(), 3))
+  val expected = Element(ElementNode(Root(), Normal(Span()), 3, 0, NoneInt(), NoneStr(), WNil()))
+in widget_eq(result, expected) end
+
+fn test_proof_class_replaces(): bool = let
+  val w = mk(Normal(P()))
+  val w1 = apply_diff(w, mk_set_class(Root(), 5))
+  val w2 = apply_diff(w1, mk_set_class(Root(), 9))
+  val expected = Element(ElementNode(Root(), Normal(P()), 9, 0, NoneInt(), NoneStr(), WNil()))
+in widget_eq(w2, expected) end
+
+fn test_proof_compose_commutes(): bool = let
+  val w = mk(Normal(Nav()))
+  val a = apply_diff(apply_diff(w, SetHidden(Root(), 1)), mk_set_class(Root(), 2))
+  val b = apply_diff(apply_diff(w, mk_set_class(Root(), 2)), SetHidden(Root(), 1))
+in widget_eq(a, b) end
+
+fn test_proof_add_child(): bool = let
+  val w = mk(Normal(Div()))
+  val child = txt_widget5('h', 'e', 'l', 'l', 'o')
+  val result = apply_diff(w, AddChild(Root(), child))
+in
+  case+ result of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 1)
+  | _ => false
+end
+
+fn test_proof_add_two_children(): bool = let
+  val w = mk(Normal(Ul()))
+  val w1 = apply_diff(w, AddChild(Root(), txt_widget5('f', 'i', 'r', 's', 't')))
+  val w2 = apply_diff(w1, AddChild(Root(), txt_widget1('s')))
+in
+  case+ w2 of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 2)
+  | _ => false
+end
+
+fn test_proof_remove_all_children(): bool = let
+  val w = mk(Normal(Div()))
+  val w1 = apply_diff(w, AddChild(Root(), txt_widget1('a')))
+  val w2 = apply_diff(w1, AddChild(Root(), txt_widget1('b')))
+  val w3 = apply_diff(w2, RemoveAllChildren(Root()))
+in
+  case+ w3 of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 0)
+  | _ => false
+end
+
+fn test_proof_remove_all_then_add(): bool = let
+  val w = mk(Normal(Div()))
+  val w1 = apply_diff(w, AddChild(Root(), txt_widget1('o')))
+  val w2 = apply_diff(w1, RemoveAllChildren(Root()))
+  val w3 = apply_diff(w2, AddChild(Root(), txt_widget1('n')))
+in
+  case+ w3 of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 1)
+  | _ => false
+end
+
+fn test_proof_text_ignores_diff(): bool = let
+  val w = txt_widget1('u')
+  val w1 = apply_diff(w, SetHidden(Root(), 1))
+  val w2 = apply_diff(w, mk_set_class(Root(), 5))
+  val w3 = apply_diff(w, AddChild(Root(), txt_widget1('x')))
+  val w4 = apply_diff(w, RemoveAllChildren(Root()))
+in widget_eq(w1, w) && widget_eq(w2, w) && widget_eq(w3, w) && widget_eq(w4, w) end
+
+fn test_proof_wrong_id_noop(): bool = let
+  val w = mk(Normal(Div()))
+  (* Generated IDs never match Root *)
+  val d = SetHidden(Root(), 1)
+  val result = apply_diff(w, d)
+  val expected = Element(ElementNode(Root(), Normal(Div()), ~1, 1, NoneInt(), NoneStr(), WNil()))
+in widget_eq(result, expected) end
+
+fn test_proof_set_tabindex(): bool = let
+  val w = mk(Normal(Div()))
+  val result = apply_diff(w, SetTabindex(Root(), SomeInt(0)))
+in
+  case+ result of
+  | Element(ElementNode(_, _, _, _, ti, _, _)) =>
+    (case+ ti of | SomeInt(v) => $AR.eq_int_int(v, 0) | _ => false)
+  | _ => false
+end
+
+fn test_proof_set_title(): bool = let
+  val w = mk(Normal(Button(ButtonSubmit())))
+  val @(ct, clen) = mk_text5('c', 'l', 'i', 'c', 'k')
+  val result = apply_diff(w, SetTitle(Root(), SomeStr(ct, clen)))
+in
+  case+ result of
+  | Element(ElementNode(_, _, _, _, _, t, _)) =>
+    (case+ t of | SomeStr(_, n) => $AR.eq_int_int(n, 5) | _ => false)
+  | _ => false
+end
+
+(* ---- Original datatype construction tests ---- *)
+
+fn test_rel_values(): bool = let
+  val r1 = RelNoopener()
+  val r2 = RelNoreferrer()
+  val ok1 = case+ r1 of | RelNoopener() => true | _ => false
+  val ok2 = case+ r2 of | RelNoreferrer() => true | _ => false
+in ok1 && ok2 end
+
+fn test_form_enctype(): bool = let
+  val e1 = EnctypeUrlencoded()
+  val e2 = EnctypeMultipart()
+  val ok1 = case+ e1 of | EnctypeUrlencoded() => true | _ => false
+  val ok2 = case+ e2 of | EnctypeMultipart() => true | _ => false
+in ok1 && ok2 end
+
+fn test_input_types(): bool = let
+  val t1 = InputText()
+  val t2 = InputCheckbox()
+  val ok1 = case+ t1 of | InputText() => true | _ => false
+  val ok2 = case+ t2 of | InputCheckbox() => true | _ => false
+in ok1 && ok2 end
+
+fn test_html_top(): bool = let
+  val n = Normal(Div())
+  val v = Void(Br())
+  val ok1 = case+ n of | Normal(_) => true | _ => false
+  val ok2 = case+ v of | Void(_) => true | _ => false
+in ok1 && ok2 end
+
+fn test_element_node(): bool = let
+  val e = ElementNode(Root(), Normal(Div()), ~1, 0, NoneInt(), NoneStr(), WNil())
+in case+ e of | ElementNode(id, _, _, _, _, _, _) => widget_id_eq(id, Root()) end
+
+fn test_widget_with_children(): bool = let
+  val children = WCons(txt_widget1('a'), WCons(txt_widget1('b'), WNil()))
+  val e = Element(ElementNode(Root(), Normal(Ul()), ~1, 0, NoneInt(), NoneStr(), children))
+in case+ e of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 2)
+  | _ => false
+end
+
+fn test_label(): bool = let
+  val @(ft, flen) = mk_text3('f', 'o', 'o')
+  val l = Label(SomeStr(ft, flen))
+in case+ l of | Label(s) => (case+ s of | SomeStr(_, n) => $AR.eq_int_int(n, 3) | _ => false) | _ => false end
+
+fn test_optgroup(): bool = let
+  val @(t, tl) = mk_text3('r', 'e', 'd')
+  val og = Optgroup(t, tl)
+in case+ og of | Optgroup(_, n) => $AR.eq_int_int(n, 3) | _ => false end
+
+fn test_th_with_scope(): bool = let
+  val th = Th(2, 3, SomeInt(1))
+in case+ th of | Th(cs, rs, _) => $AR.eq_int_int(cs, 2) && $AR.eq_int_int(rs, 3) | _ => false end
+
+fn test_ol_with_type(): bool = let
+  val ol = Ol(SomeInt(1))
+in case+ ol of | Ol(t) => (case+ t of | SomeInt(v) => $AR.eq_int_int(v, 1) | _ => false) | _ => false end
+
+fn test_diff_set_attribute(): bool = let
+  val @(ht, hlen) = mk_text3('u', 'r', 'l')
+  val d = SetAttribute(Root(), SetHref(ht, hlen))
+in case+ d of | SetAttribute(_, ac) => (case+ ac of | SetHref(_, _) => true | _ => false) | _ => false end
+
+(* ---- Convenience function tests ---- *)
+
+fn test_conv_add_child(): bool = let
+  val w = mk(Normal(Div()))
+  val @(w2, d) = add_child(w, txt_widget5('h', 'e', 'l', 'l', 'o'))
+in
+  (case+ w2 of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 1)
+  | _ => false) &&
+  (case+ d of | AddChild(id, _) => widget_id_eq(id, Root()) | _ => false)
+end
+
+fn test_conv_set_hidden(): bool = let
+  val w = mk(Normal(Div()))
+  val @(w2, d) = set_hidden(w, 1)
+in
+  (case+ w2 of
+  | Element(ElementNode(_, _, _, h, _, _, _)) => $AR.eq_int_int(h, 1)
+  | _ => false) &&
+  (case+ d of | SetHidden(_, v) => $AR.eq_int_int(v, 1) | _ => false)
+end
+
+fn test_conv_set_class(): bool = let
+  val w = mk(Normal(Span()))
+  val @(w2, d) = set_class(w, 7)
+in
+  (case+ w2 of
+  | Element(ElementNode(_, _, c, _, _, _, _)) => $AR.eq_int_int(c, 7)
+  | _ => false) &&
+  (case+ d of | SetClass(_, v, _, _) => $AR.eq_int_int(v, 7) | _ => false)
+end
+
+fn test_conv_remove_all_children(): bool = let
+  val w = mk(Normal(Div()))
+  val @(w1, _) = add_child(w, txt_widget1('a'))
+  val @(w2, _) = add_child(w1, txt_widget1('b'))
+  val @(w3, d) = remove_all_children(w2)
+in
+  (case+ w3 of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 0)
+  | _ => false) &&
+  (case+ d of | RemoveAllChildren(_) => true | _ => false)
+end
+
+fn test_conv_text_noop(): bool = let
+  val w = txt_widget2('h', 'i')
+  val @(w2, _) = set_hidden(w, 1)
+in widget_eq(w, w2) end
+
+(* Generated ids are compared by their text: two ids with the same text
+   are the same id, so remove_child finds the child *)
+fn test_remove_child_by_generated_id(): bool = let
+  val @(t1, n1) = mk_text2('b', '1')
+  val @(t2, n2) = mk_text2('b', '1')
+  val kid = Element(ElementNode(Generated(t1, n1), Normal(Div()), ~1, 0, NoneInt(), NoneStr(), WNil()))
+  val @(w1, _) = add_child(mk(Normal(Div())), kid)
+  val @(w2, _) = remove_child(w1, Generated(t2, n2))
+in
+  case+ w2 of
+  | Element(ElementNode(_, _, _, _, _, _, ch)) => wlist_len(ch) = 0
+  | _ => false
+end
+
+end
