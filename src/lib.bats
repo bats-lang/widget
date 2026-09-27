@@ -13,7 +13,7 @@
    ============================================================ *)
 
 #pub datatype option_int =
-  | SomeInt of (int)
+  | {v:int} SomeInt of (int v)
   | NoneInt
 
 (* A class: none, or an index into css's class names *)
@@ -163,25 +163,30 @@
    Widget
    ============================================================ *)
 
-(* A list of n widgets *)
-#pub datatype widget_list(int) =
-  | WNil(0)
-  | {n:nat} WCons(n + 1) of (widget, widget_list(n))
+(* A list of k widgets whose sizes add up to s. A widget's size is its
+   number of nodes (itself and everything under it), so a walk over a
+   tree has a termination metric. *)
+#pub datatype widget_list(int, int) =
+  | WNil(0, 0)
+  | {k,s:nat}{t:pos} WCons(k + 1, s + t) of (widget_sz(t), widget_list(k, s))
 
-and widget =
-  | {n:pos | n < 65536} Text of ($A.text(n), int(n))
-  | Element of (element_node)
+and widget_sz(int) =
+  | {n:pos | n < 65536} Text(1) of ($A.text(n), int(n))
+  | {s:pos} Element(s) of (element_node(s))
 
-and element_node =
-  | {k:nat} ElementNode of (
+and element_node(int) =
+  | {k,s:nat} ElementNode(s + 1) of (
       widget_id,    (* id *)
       html_top,     (* element type *)
       class_opt,    (* class *)
       bool,         (* hidden *)
       option_int,   (* tabindex *)
       option_str,   (* title *)
-      widget_list(k)   (* children, always WNil when top is Void *)
+      widget_list(k, s)   (* children, always WNil when top is Void *)
     )
+
+(* A widget of any size *)
+#pub typedef widget = [s:pos] widget_sz(s)
 
 (* ============================================================
    Diff operations
@@ -257,12 +262,12 @@ and attribute_change =
    Internal helpers
    ============================================================ *)
 
-#pub fn _wlist_append {n:nat} (wl: widget_list(n), w: widget): widget_list(n + 1)
+#pub fn _wlist_append {n,s:nat}{t:pos} (wl: widget_list(n, s), w: widget_sz(t)): widget_list(n + 1, s + t)
 #pub fn _widget_id_eq(a: widget_id, b: widget_id): bool
-#pub fn _wlist_remove_by_id {n:nat}
-  (wl: widget_list(n), target: widget_id): [m:nat | m <= n] widget_list(m)
+#pub fn _wlist_remove_by_id {n,s:nat}
+  (wl: widget_list(n, s), target: widget_id): [m,s2:nat | m <= n; s2 <= s] widget_list(m, s2)
 
-fun _append {n:nat} .<n>. (wl: widget_list(n), w: widget): widget_list(n + 1) =
+fun _append {n,s:nat}{t:pos} .<n>. (wl: widget_list(n, s), w: widget_sz(t)): widget_list(n + 1, s + t) =
   case+ wl of
   | WNil() => WCons(w, WNil())
   | WCons(hd, tl) => WCons(hd, _append(tl, w))
@@ -288,8 +293,8 @@ implement _widget_id_eq (a, b) =
      | Root() => false)
 
 (* wl without its first element whose id is target *)
-fun _remove {n:nat} .<n>.
-  (wl: widget_list(n), target: widget_id): [m:nat | m <= n] widget_list(m) =
+fun _remove {n,s:nat} .<n>.
+  (wl: widget_list(n, s), target: widget_id): [m,s2:nat | m <= n; s2 <= s] widget_list(m, s2) =
   case+ wl of
   | WNil() => WNil()
   | WCons(hd, tl) => let
@@ -414,14 +419,14 @@ fn txt_widget5(c1: char, c2: char, c3: char, c4: char, c5: char): widget = let
   val @(t, n) = mk_text5(c1, c2, c3, c4, c5)
 in Text(t, n) end
 
-fun wlist_len {n:nat} .<n>. (wl: widget_list(n)): int n =
+fun wlist_len {n,s:nat} .<n>. (wl: widget_list(n, s)): int n =
   case+ wl of
   | WNil() => 0
   | WCons(_, rest) => 1 + wlist_len(rest)
 
-fn wlist_append {n:nat} (wl: widget_list(n), w: widget): widget_list(n + 1) = _wlist_append(wl, w)
+fn wlist_append {n,s:nat}{t:pos} (wl: widget_list(n, s), w: widget_sz(t)): widget_list(n + 1, s + t) = _wlist_append(wl, w)
 
-fn wlist_remove_by_id {n:nat} (wl: widget_list(n), target: widget_id): [m:nat | m <= n] widget_list(m) =
+fn wlist_remove_by_id {n,s:nat} (wl: widget_list(n, s), target: widget_id): [m,s2:nat | m <= n; s2 <= s] widget_list(m, s2) =
   _wlist_remove_by_id(wl, target)
 
 (* ---- apply_diff ---- *)
