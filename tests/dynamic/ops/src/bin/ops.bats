@@ -19,7 +19,7 @@ fn gid (a: char, b: char): $W.widget_id = let
 in $W.Generated($S.text_of_chars(c, 2), 2) end
 
 fn div (id: $W.widget_id): $W.widget =
-  $W.Element($W.ElementNode(id, $W.Normal($W.Div()), ~1, 0, $W.NoneInt(), $W.NoneStr(), $W.WNil()))
+  $W.Element($W.ElementNode(id, $W.Normal($W.Div()), $W.NoClass(), 0, $W.NoneInt(), $W.NoneStr(), $W.WNil()))
 
 fn id_is (a: $W.widget_id, b: $W.widget_id): bool = $W._widget_id_eq(a, b)
 
@@ -90,7 +90,7 @@ implement main0 () = let
     | $W.SetHidden(t, v) => id_is(t, gid('e', '1')) && v = 1 | _ => false))
   val @(c, dc) = $W.set_class(el, 675)
   val () = report("class", (case+ c of
-    | $W.Element($W.ElementNode(_, _, _, _, _, _, _)) => true | _ => false))
+    | $W.Element($W.ElementNode(_, _, $W.ClassIdx(i), _, _, _, _)) => i = 675 | _ => false))
   val () = report("class_diff", (case+ dc of
     | $W.SetClass(t, i, txt, n) =>
         if n = 3 then id_is(t, gid('e', '1')) && i = 675 &&
