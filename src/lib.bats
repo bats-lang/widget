@@ -143,23 +143,24 @@
    Widget
    ============================================================ *)
 
-#pub datatype widget_list =
-  | WNil
-  | WCons of (widget, widget_list)
+(* A list of n widgets *)
+#pub datatype widget_list(int) =
+  | WNil(0)
+  | {n:nat} WCons(n + 1) of (widget, widget_list(n))
 
 and widget =
   | {n:pos | n < 65536} Text of ($A.text(n), int(n))
   | Element of (element_node)
 
 and element_node =
-  | ElementNode of (
+  | {k:nat} ElementNode of (
       widget_id,    (* id *)
       html_top,     (* element type *)
       int,          (* class index, -1 = none *)
       int,          (* hidden: 0/1 *)
       option_int,   (* tabindex *)
       option_str,   (* title *)
-      widget_list   (* children, always WNil when top is Void *)
+      widget_list(k)   (* children, always WNil when top is Void *)
     )
 
 (* ============================================================
@@ -233,21 +234,26 @@ and attribute_change =
    Internal helpers
    ============================================================ *)
 
-#pub fn _wlist_append(wl: widget_list, w: widget): widget_list
+#pub fn _wlist_append {n:nat} (wl: widget_list(n), w: widget): widget_list(n + 1)
 #pub fn _widget_id_eq(a: widget_id, b: widget_id): bool
-#pub fn _wlist_remove_by_id(wl: widget_list, target: widget_id): widget_list
+#pub fn _wlist_remove_by_id {n:nat}
+  (wl: widget_list(n), target: widget_id): [m:nat | m <= n] widget_list(m)
 
-implement _wlist_append (wl, w) =
+fun _append {n:nat} .<n>. (wl: widget_list(n), w: widget): widget_list(n + 1) =
   case+ wl of
   | WNil() => WCons(w, WNil())
-  | WCons(hd, tl) => WCons(hd, _wlist_append(tl, w))
+  | WCons(hd, tl) => WCons(hd, _append(tl, w))
+
+implement _wlist_append (wl, w) = _append(wl, w)
 
 implement _widget_id_eq (a, b) =
   case+ a of
   | Root() => (case+ b of | Root() => true | _ => false)
   | Generated(_, _) => false
 
-implement _wlist_remove_by_id (wl, target) =
+(* wl without its first element whose id is target *)
+fun _remove {n:nat} .<n>.
+  (wl: widget_list(n), target: widget_id): [m:nat | m <= n] widget_list(m) =
   case+ wl of
   | WNil() => WNil()
   | WCons(hd, tl) => let
@@ -256,8 +262,10 @@ implement _wlist_remove_by_id (wl, target) =
         | Text(_, _) => false
     in
       if matches then tl
-      else WCons(hd, _wlist_remove_by_id(tl, target))
+      else WCons(hd, _remove(tl, target))
     end
+
+implement _wlist_remove_by_id (wl, target) = _remove(wl, target)
 
 (* ============================================================
    Convenience functions: return (updated_widget, diff)
@@ -374,14 +382,14 @@ fn txt_widget5(c1: char, c2: char, c3: char, c4: char, c5: char): widget = let
   val @(t, n) = mk_text5(c1, c2, c3, c4, c5)
 in Text(t, n) end
 
-fn wlist_len(wl: widget_list): int =
+fn wlist_len {n:nat} (wl: widget_list(n)): int =
   case+ wl of
   | WNil() => 0
   | WCons(_, rest) => 1 + wlist_len(rest)
 
-fn wlist_append(wl: widget_list, w: widget): widget_list = _wlist_append(wl, w)
+fn wlist_append {n:nat} (wl: widget_list(n), w: widget): widget_list(n + 1) = _wlist_append(wl, w)
 
-fn wlist_remove_by_id(wl: widget_list, target: widget_id): widget_list =
+fn wlist_remove_by_id {n:nat} (wl: widget_list(n), target: widget_id): [m:nat | m <= n] widget_list(m) =
   _wlist_remove_by_id(wl, target)
 
 (* ---- apply_diff ---- *)
