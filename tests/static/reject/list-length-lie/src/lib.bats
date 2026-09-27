@@ -4,6 +4,6 @@
 #use widget as W
 
 fn div (): $W.widget =
-  $W.Element($W.ElementNode($W.Root(), $W.Normal($W.Div()), $W.NoClass(), 0, $W.NoneInt(), $W.NoneStr(), $W.WNil()))
+  $W.Element($W.ElementNode($W.Root(), $W.Normal($W.Div()), $W.NoClass(), false, $W.NoneInt(), $W.NoneStr(), $W.WNil()))
 
 fn two (): $W.widget_list(2) = $W._wlist_append($W.WNil(), div())
