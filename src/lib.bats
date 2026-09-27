@@ -226,9 +226,12 @@ and attribute_change =
    Diff list -- for operations that produce multiple diffs
    ============================================================ *)
 
-#pub datatype diff_list =
-  | DLNil
-  | DLCons of (diff, diff_list)
+(* A sequence of n diffs; diff_list is one of any length *)
+#pub datatype diff_seq(int) =
+  | DLNil(0)
+  | {n:nat} DLCons(n + 1) of (diff, diff_seq(n))
+
+#pub typedef diff_list = [n:nat] diff_seq(n)
 
 (* ============================================================
    Internal helpers
