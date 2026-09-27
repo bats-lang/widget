@@ -177,7 +177,7 @@ and element_node =
       widget_id,    (* id *)
       html_top,     (* element type *)
       class_opt,    (* class *)
-      int,          (* hidden: 0/1 *)
+      bool,         (* hidden *)
       option_int,   (* tabindex *)
       option_str,   (* title *)
       widget_list(k)   (* children, always WNil when top is Void *)
@@ -191,7 +191,7 @@ and element_node =
   | RemoveAllChildren of (widget_id)
   | AddChild of (widget_id, widget)       (* parent, child *)
   | RemoveChild of (widget_id, widget_id) (* parent, child_id *)
-  | SetHidden of (widget_id, int)
+  | SetHidden of (widget_id, bool)
   | {n:pos | n < 256}{i:nat | i < 676} SetClass of (widget_id, int i, $A.text(n), int(n))  (* class index + resolved name *)
   | {n:pos | n < 256} SetClassName of (widget_id, $A.text(n), int(n))   (* set class attr by name *)
   | {n:pos | n < 65536} SetTextContent of (widget_id, $A.text(n), int(n)) (* set text content *)
@@ -310,7 +310,7 @@ implement _wlist_remove_by_id (wl, target) = _remove(wl, target)
 #pub fn add_child(parent: widget, child: widget): @(widget, diff)
 #pub fn remove_child(parent: widget, child_id: widget_id): @(widget, diff)
 #pub fn remove_all_children(w: widget): @(widget, diff)
-#pub fn set_hidden(w: widget, h: int): @(widget, diff)
+#pub fn set_hidden(w: widget, h: bool): @(widget, diff)
 #pub fn set_class {i:nat | i < 676} (w: widget, cls: int i): @(widget, diff)
 #pub fn set_class_name{n:pos | n < 256}(wid: widget_id, cls: $A.text(n), len: int n): diff
 #pub fn set_text_content{n:pos | n < 65536}(wid: widget_id, text: $A.text(n), len: int n): diff
@@ -375,7 +375,7 @@ implement set_title (w, t) =
       SetTitle(id, t))
 
 implement inject_css (parent, style_id, css, len) = let
-  val style_w = Element(ElementNode(style_id, Normal(Style()), NoClass(), 0, NoneInt(), NoneStr(), WNil()))
+  val style_w = Element(ElementNode(style_id, Normal(Style()), NoClass(), false, NoneInt(), NoneStr(), WNil()))
   val @(parent2, d1) = add_child(parent, style_w)
   val d2 = SetTextContent(style_id, css, len)
 in @(parent2, DLCons(d1, DLCons(d2, DLNil()))) end
@@ -477,30 +477,30 @@ fn widget_eq(a: widget, b: widget): bool =
     | Element(ElementNode(id2, _, c2, h2, _, _, ch2)) =>
         widget_id_eq(id1, id2) &&
         class_eq(c1, c2) &&
-        $AR.eq_int_int(h1, h2) &&
+        h1 = h2 &&
         $AR.eq_int_int(wlist_len(ch1), wlist_len(ch2)))
 
 fn mk(top: html_top): widget =
-  Element(ElementNode(Root(), top, NoClass(), 0, NoneInt(), NoneStr(), WNil()))
+  Element(ElementNode(Root(), top, NoClass(), false, NoneInt(), NoneStr(), WNil()))
 
 (* ---- Round-trip proofs ---- *)
 
 fn test_proof_set_hidden(): bool = let
   val w = mk(Normal(Div()))
-  val d = SetHidden(Root(), 1)
+  val d = SetHidden(Root(), true)
   val result = apply_diff(w, d)
-  val expected = Element(ElementNode(Root(), Normal(Div()), NoClass(), 1, NoneInt(), NoneStr(), WNil()))
+  val expected = Element(ElementNode(Root(), Normal(Div()), NoClass(), true, NoneInt(), NoneStr(), WNil()))
 in widget_eq(result, expected) end
 
 fn test_proof_hidden_reversible(): bool = let
   val w = mk(Normal(Div()))
-  val hidden = apply_diff(w, SetHidden(Root(), 1))
-  val restored = apply_diff(hidden, SetHidden(Root(), 0))
+  val hidden = apply_diff(w, SetHidden(Root(), true))
+  val restored = apply_diff(hidden, SetHidden(Root(), false))
 in widget_eq(restored, w) end
 
 fn test_proof_hidden_idempotent(): bool = let
   val w = mk(Normal(Div()))
-  val d = SetHidden(Root(), 1)
+  val d = SetHidden(Root(), true)
   val w1 = apply_diff(w, d)
   val w2 = apply_diff(w1, d)
 in widget_eq(w1, w2) end
@@ -512,20 +512,20 @@ in SetClass(wid, cls, t, tlen) end
 fn test_proof_set_class(): bool = let
   val w = mk(Normal(Span()))
   val result = apply_diff(w, mk_set_class(Root(), 3))
-  val expected = Element(ElementNode(Root(), Normal(Span()), ClassIdx(3), 0, NoneInt(), NoneStr(), WNil()))
+  val expected = Element(ElementNode(Root(), Normal(Span()), ClassIdx(3), false, NoneInt(), NoneStr(), WNil()))
 in widget_eq(result, expected) end
 
 fn test_proof_class_replaces(): bool = let
   val w = mk(Normal(P()))
   val w1 = apply_diff(w, mk_set_class(Root(), 5))
   val w2 = apply_diff(w1, mk_set_class(Root(), 9))
-  val expected = Element(ElementNode(Root(), Normal(P()), ClassIdx(9), 0, NoneInt(), NoneStr(), WNil()))
+  val expected = Element(ElementNode(Root(), Normal(P()), ClassIdx(9), false, NoneInt(), NoneStr(), WNil()))
 in widget_eq(w2, expected) end
 
 fn test_proof_compose_commutes(): bool = let
   val w = mk(Normal(Nav()))
-  val a = apply_diff(apply_diff(w, SetHidden(Root(), 1)), mk_set_class(Root(), 2))
-  val b = apply_diff(apply_diff(w, mk_set_class(Root(), 2)), SetHidden(Root(), 1))
+  val a = apply_diff(apply_diff(w, SetHidden(Root(), true)), mk_set_class(Root(), 2))
+  val b = apply_diff(apply_diff(w, mk_set_class(Root(), 2)), SetHidden(Root(), true))
 in widget_eq(a, b) end
 
 fn test_proof_add_child(): bool = let
@@ -572,7 +572,7 @@ end
 
 fn test_proof_text_ignores_diff(): bool = let
   val w = txt_widget1('u')
-  val w1 = apply_diff(w, SetHidden(Root(), 1))
+  val w1 = apply_diff(w, SetHidden(Root(), true))
   val w2 = apply_diff(w, mk_set_class(Root(), 5))
   val w3 = apply_diff(w, AddChild(Root(), txt_widget1('x')))
   val w4 = apply_diff(w, RemoveAllChildren(Root()))
@@ -581,9 +581,9 @@ in widget_eq(w1, w) && widget_eq(w2, w) && widget_eq(w3, w) && widget_eq(w4, w) 
 fn test_proof_wrong_id_noop(): bool = let
   val w = mk(Normal(Div()))
   (* Generated IDs never match Root *)
-  val d = SetHidden(Root(), 1)
+  val d = SetHidden(Root(), true)
   val result = apply_diff(w, d)
-  val expected = Element(ElementNode(Root(), Normal(Div()), NoClass(), 1, NoneInt(), NoneStr(), WNil()))
+  val expected = Element(ElementNode(Root(), Normal(Div()), NoClass(), true, NoneInt(), NoneStr(), WNil()))
 in widget_eq(result, expected) end
 
 fn test_proof_set_tabindex(): bool = let
@@ -638,12 +638,12 @@ fn test_html_top(): bool = let
 in ok1 && ok2 end
 
 fn test_element_node(): bool = let
-  val e = ElementNode(Root(), Normal(Div()), NoClass(), 0, NoneInt(), NoneStr(), WNil())
+  val e = ElementNode(Root(), Normal(Div()), NoClass(), false, NoneInt(), NoneStr(), WNil())
 in case+ e of | ElementNode(id, _, _, _, _, _, _) => widget_id_eq(id, Root()) end
 
 fn test_widget_with_children(): bool = let
   val children = WCons(txt_widget1('a'), WCons(txt_widget1('b'), WNil()))
-  val e = Element(ElementNode(Root(), Normal(Ul()), NoClass(), 0, NoneInt(), NoneStr(), children))
+  val e = Element(ElementNode(Root(), Normal(Ul()), NoClass(), false, NoneInt(), NoneStr(), children))
 in case+ e of
   | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 2)
   | _ => false
@@ -686,12 +686,12 @@ end
 
 fn test_conv_set_hidden(): bool = let
   val w = mk(Normal(Div()))
-  val @(w2, d) = set_hidden(w, 1)
+  val @(w2, d) = set_hidden(w, true)
 in
   (case+ w2 of
-  | Element(ElementNode(_, _, _, h, _, _, _)) => $AR.eq_int_int(h, 1)
+  | Element(ElementNode(_, _, _, h, _, _, _)) => h
   | _ => false) &&
-  (case+ d of | SetHidden(_, v) => $AR.eq_int_int(v, 1) | _ => false)
+  (case+ d of | SetHidden(_, v) => v | _ => false)
 end
 
 fn test_conv_set_class(): bool = let
@@ -718,7 +718,7 @@ end
 
 fn test_conv_text_noop(): bool = let
   val w = txt_widget2('h', 'i')
-  val @(w2, _) = set_hidden(w, 1)
+  val @(w2, _) = set_hidden(w, true)
 in widget_eq(w, w2) end
 
 (* Generated ids are compared by their text: two ids with the same text
@@ -726,7 +726,7 @@ in widget_eq(w, w2) end
 fn test_remove_child_by_generated_id(): bool = let
   val @(t1, n1) = mk_text2('b', '1')
   val @(t2, n2) = mk_text2('b', '1')
-  val kid = Element(ElementNode(Generated(t1, n1), Normal(Div()), NoClass(), 0, NoneInt(), NoneStr(), WNil()))
+  val kid = Element(ElementNode(Generated(t1, n1), Normal(Div()), NoClass(), false, NoneInt(), NoneStr(), WNil()))
   val @(w1, _) = add_child(mk(Normal(Div())), kid)
   val @(w2, _) = remove_child(w1, Generated(t2, n2))
 in

@@ -4,6 +4,6 @@
 #use widget as W
 
 fn div (): $W.widget =
-  $W.Element($W.ElementNode($W.Root(), $W.Normal($W.Div()), $W.NoClass(), 0, $W.NoneInt(), $W.NoneStr(), $W.WNil()))
+  $W.Element($W.ElementNode($W.Root(), $W.Normal($W.Div()), $W.NoClass(), false, $W.NoneInt(), $W.NoneStr(), $W.WNil()))
 
 fn last (): $W.diff = let val @(_, d) = $W.set_class(div(), 675) in d end

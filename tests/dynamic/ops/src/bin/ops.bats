@@ -19,7 +19,7 @@ fn gid (a: char, b: char): $W.widget_id = let
 in $W.Generated($S.text_of_chars(c, 2), 2) end
 
 fn div (id: $W.widget_id): $W.widget =
-  $W.Element($W.ElementNode(id, $W.Normal($W.Div()), $W.NoClass(), 0, $W.NoneInt(), $W.NoneStr(), $W.WNil()))
+  $W.Element($W.ElementNode(id, $W.Normal($W.Div()), $W.NoClass(), false, $W.NoneInt(), $W.NoneStr(), $W.WNil()))
 
 fn id_is (a: $W.widget_id, b: $W.widget_id): bool = $W._widget_id_eq(a, b)
 
@@ -83,11 +83,11 @@ implement main0 () = let
 
   (* set_hidden, set_class, set_tabindex, set_title update the element *)
   val el = div(gid('e', '1'))
-  val @(h, dh) = $W.set_hidden(el, 1)
+  val @(h, dh) = $W.set_hidden(el, true)
   val () = report("hidden", (case+ h of
-    | $W.Element($W.ElementNode(_, _, _, hv, _, _, _)) => hv = 1 | _ => false))
+    | $W.Element($W.ElementNode(_, _, _, hv, _, _, _)) => hv | _ => false))
   val () = report("hidden_diff", (case+ dh of
-    | $W.SetHidden(t, v) => id_is(t, gid('e', '1')) && v = 1 | _ => false))
+    | $W.SetHidden(t, v) => id_is(t, gid('e', '1')) && v | _ => false))
   val @(c, dc) = $W.set_class(el, 675)
   val () = report("class", (case+ c of
     | $W.Element($W.ElementNode(_, _, $W.ClassIdx(i), _, _, _, _)) => i = 675 | _ => false))
@@ -119,7 +119,7 @@ implement main0 () = let
   (* A Text widget is left as it was *)
   var tc = @[char][2]('h', 'i')
   val tw = $W.Text($S.text_of_chars(tc, 2), 2)
-  val @(tw2, dtw) = $W.set_hidden(tw, 1)
+  val @(tw2, dtw) = $W.set_hidden(tw, true)
   val () = report("text_unchanged", nkids(tw2) = ~1)
   val () = report("text_diff_root", (case+ dtw of
     | $W.SetHidden(tg, _) => id_is(tg, $W.Root()) | _ => false))
