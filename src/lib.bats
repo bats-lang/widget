@@ -171,7 +171,7 @@ and element_node =
   | AddChild of (widget_id, widget)       (* parent, child *)
   | RemoveChild of (widget_id, widget_id) (* parent, child_id *)
   | SetHidden of (widget_id, int)
-  | {n:pos | n < 256} SetClass of (widget_id, int, $A.text(n), int(n))  (* class index + resolved name *)
+  | {n:pos | n < 256}{i:nat | i < 676} SetClass of (widget_id, int i, $A.text(n), int(n))  (* class index + resolved name *)
   | {n:pos | n < 256} SetClassName of (widget_id, $A.text(n), int(n))   (* set class attr by name *)
   | {n:pos | n < 65536} SetTextContent of (widget_id, $A.text(n), int(n)) (* set text content *)
   | SetTabindex of (widget_id, option_int)
@@ -267,7 +267,7 @@ implement _wlist_remove_by_id (wl, target) =
 #pub fn remove_child(parent: widget, child_id: widget_id): @(widget, diff)
 #pub fn remove_all_children(w: widget): @(widget, diff)
 #pub fn set_hidden(w: widget, h: int): @(widget, diff)
-#pub fn set_class(w: widget, cls: int): @(widget, diff)
+#pub fn set_class {i:nat | i < 676} (w: widget, cls: int i): @(widget, diff)
 #pub fn set_class_name{n:pos | n < 256}(wid: widget_id, cls: $A.text(n), len: int n): diff
 #pub fn set_text_content{n:pos | n < 65536}(wid: widget_id, text: $A.text(n), len: int n): diff
 #pub fn set_tabindex(w: widget, ti: option_int): @(widget, diff)
@@ -460,7 +460,7 @@ fn test_proof_hidden_idempotent(): bool = let
   val w2 = apply_diff(w1, d)
 in widget_eq(w1, w2) end
 
-fn mk_set_class(wid: widget_id, cls: int): diff = let
+fn mk_set_class {i:nat | i < 676} (wid: widget_id, cls: int i): diff = let
   val @(t, tlen) = $C.class_text(cls)
 in SetClass(wid, cls, t, tlen) end
 
