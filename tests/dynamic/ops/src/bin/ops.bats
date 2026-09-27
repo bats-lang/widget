@@ -9,7 +9,7 @@
    hidden, class, tabindex and title set on the element; inject_css's two
    diffs; a Text widget left as it was. One line per check. *)
 
-fun len {n:nat} .<n>. (l: $W.widget_list(n)): int n =
+fun len {n,s:nat} .<n>. (l: $W.widget_list(n, s)): int n =
   case+ l of
   | $W.WNil() => 0
   | $W.WCons(_, rest) => 1 + len(rest)
@@ -30,7 +30,7 @@ fn nkids (w: $W.widget): int =
   | $W.Text(_, _) => ~1
 
 (* Whether the i-th child (from 0) of w has id *)
-fun kid_at {n:nat} .<n>. (l: $W.widget_list(n), i: int, id: $W.widget_id): bool =
+fun kid_at {n,s:nat} .<n>. (l: $W.widget_list(n, s), i: int, id: $W.widget_id): bool =
   case+ l of
   | $W.WNil() => false
   | $W.WCons(c, rest) =>
