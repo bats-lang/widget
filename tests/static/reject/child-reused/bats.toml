@@ -1,0 +1,8 @@
+[package]
+name = "child-reused"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"str" = ""
+"widget" = ""

@@ -1,0 +1,8 @@
+[package]
+name = "widget-leak"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"str" = ""
+"widget" = ""
