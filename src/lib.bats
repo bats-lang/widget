@@ -16,6 +16,11 @@
   | SomeInt of (int)
   | NoneInt
 
+(* A class: none, or an index into css's class names *)
+#pub datatype class_opt =
+  | NoClass
+  | {i:nat | i < 676} ClassIdx of (int i)
+
 #pub datatype option_str =
   | {n:pos | n < 256} SomeStr of ($A.text(n), int(n))
   | NoneStr
@@ -36,9 +41,19 @@
 #pub datatype th_scope =
   | ScopeCol | ScopeRow | ScopeColgroup | ScopeRowgroup
 
+(* A header cell's scope, when it has one *)
+#pub datatype scope_opt =
+  | NoScope
+  | ScopeIs of (th_scope)
+
 #pub datatype ol_list_type =
   | OlDecimal | OlLowerAlpha | OlUpperAlpha
   | OlLowerRoman | OlUpperRoman
+
+(* An ordered list's numbering type, when it has one *)
+#pub datatype ol_type_opt =
+  | OlDefault
+  | OlTypeIs of (ol_list_type)
 
 #pub datatype img_loading =
   | LoadingLazy | LoadingEager
@@ -50,7 +65,12 @@
 
 #pub datatype link_target =
   | Blank | Self_ | Parent_ | Top_
-  | {n:pos} NamedTarget of ($A.text(n), int(n))
+  | {n:pos | n < 256} NamedTarget of ($A.text(n), int(n))
+
+(* An anchor's target, when it has one *)
+#pub datatype target_opt =
+  | NoTarget
+  | TargetIs of (link_target)
 
 #pub datatype button_type =
   | ButtonSubmit | ButtonReset | ButtonButton
@@ -87,27 +107,27 @@
   | Del | Ins | HtmlSub | Sup
   (* Lists *)
   | Ul
-  | Ol of (option_int)         (* None=default, Some(n)=ol_list_type index *)
+  | Ol of (ol_type_opt)
   | Li
   (* Interactive *)
-  | {n:pos | n < 256} A of ($A.text(n), int(n), option_int)  (* href, target index *)
+  | {n:pos | n < 256} A of ($A.text(n), int(n), target_opt)  (* href, target *)
   | Button of (button_type)
   | Label of (option_str)      (* for: target id or absent *)
   | Details | Summary
   (* Form *)
   | {n:pos | n < 256} Form of ($A.text(n), int(n), form_method, form_enctype)
   | Fieldset | Legend
-  | {n:pos | n < 256} Select of ($A.text(n), int(n), int)    (* name, multiple: 0/1 *)
+  | {n:pos | n < 256} Select of ($A.text(n), int(n), bool)    (* name, multiple *)
   | {n:pos | n < 256} Optgroup of ($A.text(n), int(n))       (* label *)
   | {n:pos | n < 256} HtmlOption of ($A.text(n), int(n))     (* value *)
-  | {n:pos | n < 256} Textarea of ($A.text(n), int(n), int, int) (* name, rows, cols *)
+  | {n:pos | n < 256}{r,c:pos} Textarea of ($A.text(n), int(n), int r, int c) (* name, rows, cols *)
   (* Table *)
   | Table | Caption | Thead | Tbody | Tfoot | Tr
-  | Th of (int, int, option_int)   (* colspan, rowspan, scope index *)
-  | Td of (int, int)               (* colspan, rowspan *)
+  | {cs,rs:pos} Th of (int cs, int rs, scope_opt)   (* colspan, rowspan, scope *)
+  | {cs,rs:pos} Td of (int cs, int rs)              (* colspan, rowspan *)
   (* Media *)
-  | {n:pos | n < 256} Video of ($A.text(n), int(n), int, int, int, int) (* src, controls, autoplay, loop, muted *)
-  | {n:pos | n < 256} Audio of ($A.text(n), int(n), int, int, int, int) (* src, controls, autoplay, loop, muted *)
+  | {n:pos | n < 256} Video of ($A.text(n), int(n), bool, bool, bool, bool) (* src, controls, autoplay, loop, muted *)
+  | {n:pos | n < 256} Audio of ($A.text(n), int(n), bool, bool, bool, bool) (* src, controls, autoplay, loop, muted *)
   | Picture
   (* Metadata *)
   | Style
@@ -119,7 +139,7 @@
 #pub datatype html_void =
   | Br | Hr | Wbr
   | {ns:pos | ns < 256}{na:pos | na < 256} Img of ($A.text(ns), int(ns), $A.text(na), int(na), img_loading)  (* src, alt, loading *)
-  | HtmlInput of (input_type, option_str, option_str, int, int, int) (* type, name, value, disabled, checked, required *)
+  | HtmlInput of (input_type, option_str, option_str, bool, bool, bool) (* type, name, value, disabled, checked, required *)
   | {ns:pos | ns < 256}{nt:pos | nt < 256} Source of ($A.text(ns), int(ns), $A.text(nt), int(nt))  (* src, type *)
   | {n:pos | n < 256} Track of ($A.text(n), int(n), track_kind, option_str) (* src, kind, srclang *)
 
@@ -156,7 +176,7 @@ and element_node =
   | {k:nat} ElementNode of (
       widget_id,    (* id *)
       html_top,     (* element type *)
-      int,          (* class index, -1 = none *)
+      class_opt,    (* class *)
       int,          (* hidden: 0/1 *)
       option_int,   (* tabindex *)
       option_str,   (* title *)
@@ -182,31 +202,31 @@ and element_node =
 and attribute_change =
   (* A *)
   | {n:pos | n < 256} SetHref of ($A.text(n), int(n))
-  | SetATarget of (option_int)
+  | SetATarget of (target_opt)
   (* Button *)
   | SetButtonType of (button_type)
-  | SetButtonDisabled of (int)
+  | SetButtonDisabled of (bool)
   (* Form *)
   | {n:pos | n < 256} SetFormAction of ($A.text(n), int(n))
   | SetFormMethod of (form_method)
   | SetFormEnctype of (form_enctype)
   (* Select *)
-  | SetSelectDisabled of (int)
-  | SetSelectMultiple of (int)
+  | SetSelectDisabled of (bool)
+  | SetSelectMultiple of (bool)
   (* Option *)
   | {n:pos | n < 256} SetOptionValue of ($A.text(n), int(n))
-  | SetOptionDisabled of (int)
-  | SetOptionSelected of (int)
+  | SetOptionDisabled of (bool)
+  | SetOptionSelected of (bool)
   (* Textarea *)
   | {n:pos | n < 256} SetTextareaValue of ($A.text(n), int(n))
-  | SetTextareaDisabled of (int)
-  | SetTextareaReadonly of (int)
-  | SetTextareaRows of (int)
-  | SetTextareaCols of (int)
+  | SetTextareaDisabled of (bool)
+  | SetTextareaReadonly of (bool)
+  | {n:pos} SetTextareaRows of (int n)
+  | {n:pos} SetTextareaCols of (int n)
   (* Th, Td *)
-  | SetColspan of (int)
-  | SetRowspan of (int)
-  | SetThScope of (option_int)
+  | {n:pos} SetColspan of (int n)
+  | {n:pos} SetRowspan of (int n)
+  | SetThScope of (scope_opt)
   (* Img *)
   | {n:pos | n < 256} SetImgSrc of ($A.text(n), int(n))
   | {n:pos | n < 256} SetImgAlt of ($A.text(n), int(n))
@@ -215,12 +235,12 @@ and attribute_change =
   | SetInputType of (input_type)
   | SetInputName of (option_str)
   | SetInputValue of (option_str)
-  | SetInputDisabled of (int)
-  | SetInputChecked of (int)
-  | SetInputRequired of (int)
-  | SetInputReadonly of (int)
+  | SetInputDisabled of (bool)
+  | SetInputChecked of (bool)
+  | SetInputRequired of (bool)
+  | SetInputReadonly of (bool)
   (* Details *)
-  | SetDetailsOpen of (int)
+  | SetDetailsOpen of (bool)
 
 (* ============================================================
    Diff list -- for operations that produce multiple diffs
@@ -332,7 +352,7 @@ in
   case+ w of
   | Text(_, _) => @(w, SetClass(Root(), cls, t, tlen))
   | Element(ElementNode(id, top, _, hidden, ti, title, children)) =>
-    @(Element(ElementNode(id, top, cls, hidden, ti, title, children)),
+    @(Element(ElementNode(id, top, ClassIdx(cls), hidden, ti, title, children)),
       SetClass(id, cls, t, tlen))
 end
 
@@ -355,7 +375,7 @@ implement set_title (w, t) =
       SetTitle(id, t))
 
 implement inject_css (parent, style_id, css, len) = let
-  val style_w = Element(ElementNode(style_id, Normal(Style()), ~1, 0, NoneInt(), NoneStr(), WNil()))
+  val style_w = Element(ElementNode(style_id, Normal(Style()), NoClass(), 0, NoneInt(), NoneStr(), WNil()))
   val @(parent2, d1) = add_child(parent, style_w)
   val d2 = SetTextContent(style_id, css, len)
 in @(parent2, DLCons(d1, DLCons(d2, DLNil()))) end
@@ -417,7 +437,7 @@ fn apply_diff(w: widget, d: diff): widget =
         else w
     | SetClass(target, new_cls, _, _) =>
         if widget_id_eq(id, target)
-        then Element(ElementNode(id, top, new_cls, hidden, tabidx, title, children))
+        then Element(ElementNode(id, top, ClassIdx(new_cls), hidden, tabidx, title, children))
         else w
     | SetTabindex(target, new_ti) =>
         if widget_id_eq(id, target)
@@ -443,6 +463,11 @@ fn apply_diff(w: widget, d: diff): widget =
     | SetTextContent(_, _, _) => w  (* text content is a DOM-only concept *)
     | SetAttribute(_, _) => w  (* attribute changes require html_top mutation *)
 
+fn class_eq(a: class_opt, b: class_opt): bool =
+  case+ a of
+  | NoClass() => (case+ b of | NoClass() => true | _ => false)
+  | ClassIdx(i) => (case+ b of | ClassIdx(j) => $AR.eq_int_int(i, j) | _ => false)
+
 fn widget_eq(a: widget, b: widget): bool =
   case+ a of
   | Text(_, l1) => (case+ b of | Text(_, l2) => $AR.eq_int_int(l1, l2) | _ => false)
@@ -451,12 +476,12 @@ fn widget_eq(a: widget, b: widget): bool =
     | Text(_, _) => false
     | Element(ElementNode(id2, _, c2, h2, _, _, ch2)) =>
         widget_id_eq(id1, id2) &&
-        $AR.eq_int_int(c1, c2) &&
+        class_eq(c1, c2) &&
         $AR.eq_int_int(h1, h2) &&
         $AR.eq_int_int(wlist_len(ch1), wlist_len(ch2)))
 
 fn mk(top: html_top): widget =
-  Element(ElementNode(Root(), top, ~1, 0, NoneInt(), NoneStr(), WNil()))
+  Element(ElementNode(Root(), top, NoClass(), 0, NoneInt(), NoneStr(), WNil()))
 
 (* ---- Round-trip proofs ---- *)
 
@@ -464,7 +489,7 @@ fn test_proof_set_hidden(): bool = let
   val w = mk(Normal(Div()))
   val d = SetHidden(Root(), 1)
   val result = apply_diff(w, d)
-  val expected = Element(ElementNode(Root(), Normal(Div()), ~1, 1, NoneInt(), NoneStr(), WNil()))
+  val expected = Element(ElementNode(Root(), Normal(Div()), NoClass(), 1, NoneInt(), NoneStr(), WNil()))
 in widget_eq(result, expected) end
 
 fn test_proof_hidden_reversible(): bool = let
@@ -487,14 +512,14 @@ in SetClass(wid, cls, t, tlen) end
 fn test_proof_set_class(): bool = let
   val w = mk(Normal(Span()))
   val result = apply_diff(w, mk_set_class(Root(), 3))
-  val expected = Element(ElementNode(Root(), Normal(Span()), 3, 0, NoneInt(), NoneStr(), WNil()))
+  val expected = Element(ElementNode(Root(), Normal(Span()), ClassIdx(3), 0, NoneInt(), NoneStr(), WNil()))
 in widget_eq(result, expected) end
 
 fn test_proof_class_replaces(): bool = let
   val w = mk(Normal(P()))
   val w1 = apply_diff(w, mk_set_class(Root(), 5))
   val w2 = apply_diff(w1, mk_set_class(Root(), 9))
-  val expected = Element(ElementNode(Root(), Normal(P()), 9, 0, NoneInt(), NoneStr(), WNil()))
+  val expected = Element(ElementNode(Root(), Normal(P()), ClassIdx(9), 0, NoneInt(), NoneStr(), WNil()))
 in widget_eq(w2, expected) end
 
 fn test_proof_compose_commutes(): bool = let
@@ -558,7 +583,7 @@ fn test_proof_wrong_id_noop(): bool = let
   (* Generated IDs never match Root *)
   val d = SetHidden(Root(), 1)
   val result = apply_diff(w, d)
-  val expected = Element(ElementNode(Root(), Normal(Div()), ~1, 1, NoneInt(), NoneStr(), WNil()))
+  val expected = Element(ElementNode(Root(), Normal(Div()), NoClass(), 1, NoneInt(), NoneStr(), WNil()))
 in widget_eq(result, expected) end
 
 fn test_proof_set_tabindex(): bool = let
@@ -613,12 +638,12 @@ fn test_html_top(): bool = let
 in ok1 && ok2 end
 
 fn test_element_node(): bool = let
-  val e = ElementNode(Root(), Normal(Div()), ~1, 0, NoneInt(), NoneStr(), WNil())
+  val e = ElementNode(Root(), Normal(Div()), NoClass(), 0, NoneInt(), NoneStr(), WNil())
 in case+ e of | ElementNode(id, _, _, _, _, _, _) => widget_id_eq(id, Root()) end
 
 fn test_widget_with_children(): bool = let
   val children = WCons(txt_widget1('a'), WCons(txt_widget1('b'), WNil()))
-  val e = Element(ElementNode(Root(), Normal(Ul()), ~1, 0, NoneInt(), NoneStr(), children))
+  val e = Element(ElementNode(Root(), Normal(Ul()), NoClass(), 0, NoneInt(), NoneStr(), children))
 in case+ e of
   | Element(ElementNode(_, _, _, _, _, _, ch)) => $AR.eq_int_int(wlist_len(ch), 2)
   | _ => false
@@ -635,12 +660,12 @@ fn test_optgroup(): bool = let
 in case+ og of | Optgroup(_, n) => $AR.eq_int_int(n, 3) | _ => false end
 
 fn test_th_with_scope(): bool = let
-  val th = Th(2, 3, SomeInt(1))
+  val th = Th(2, 3, ScopeIs(ScopeRow()))
 in case+ th of | Th(cs, rs, _) => $AR.eq_int_int(cs, 2) && $AR.eq_int_int(rs, 3) | _ => false end
 
 fn test_ol_with_type(): bool = let
-  val ol = Ol(SomeInt(1))
-in case+ ol of | Ol(t) => (case+ t of | SomeInt(v) => $AR.eq_int_int(v, 1) | _ => false) | _ => false end
+  val ol = Ol(OlTypeIs(OlLowerAlpha()))
+in case+ ol of | Ol(t) => (case+ t of | OlTypeIs(OlLowerAlpha()) => true | _ => false) | _ => false end
 
 fn test_diff_set_attribute(): bool = let
   val @(ht, hlen) = mk_text3('u', 'r', 'l')
@@ -674,7 +699,7 @@ fn test_conv_set_class(): bool = let
   val @(w2, d) = set_class(w, 7)
 in
   (case+ w2 of
-  | Element(ElementNode(_, _, c, _, _, _, _)) => $AR.eq_int_int(c, 7)
+  | Element(ElementNode(_, _, c, _, _, _, _)) => class_eq(c, ClassIdx(7))
   | _ => false) &&
   (case+ d of | SetClass(_, v, _, _) => $AR.eq_int_int(v, 7) | _ => false)
 end
@@ -701,7 +726,7 @@ in widget_eq(w, w2) end
 fn test_remove_child_by_generated_id(): bool = let
   val @(t1, n1) = mk_text2('b', '1')
   val @(t2, n2) = mk_text2('b', '1')
-  val kid = Element(ElementNode(Generated(t1, n1), Normal(Div()), ~1, 0, NoneInt(), NoneStr(), WNil()))
+  val kid = Element(ElementNode(Generated(t1, n1), Normal(Div()), NoClass(), 0, NoneInt(), NoneStr(), WNil()))
   val @(w1, _) = add_child(mk(Normal(Div())), kid)
   val @(w2, _) = remove_child(w1, Generated(t2, n2))
 in

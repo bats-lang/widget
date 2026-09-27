@@ -1,0 +1,8 @@
+[package]
+name = "zero-colspan"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"str" = ""
+"widget" = ""
