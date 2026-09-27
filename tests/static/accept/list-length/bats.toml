@@ -1,0 +1,8 @@
+[package]
+name = "list-length"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"str" = ""
+"widget" = ""

@@ -1,0 +1,8 @@
+[package]
+name = "class-past-last"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"str" = ""
+"widget" = ""

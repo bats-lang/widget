@@ -1,0 +1,8 @@
+[package]
+name = "class-last"
+kind = "lib"
+
+[dependencies]
+"array" = ""
+"str" = ""
+"widget" = ""
