@@ -1,0 +1,9 @@
+[package]
+name = "ops"
+kind = "bin"
+
+[dependencies]
+"array" = ""
+"arith" = ""
+"str" = ""
+"widget" = ""
